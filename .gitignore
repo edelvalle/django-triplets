@@ -1,0 +1,9 @@
+*.egg-info/
+*.eggs/
+*.sqlite3
+.envrc
+dist/
+__pycache__/
+.pytest_cache/
+.coverage
+.vscode/
