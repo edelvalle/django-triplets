@@ -25,18 +25,19 @@ triplets = [
 class Database(core.Database):
     triplets: list[Triplet]
 
-    def lookup(self, predicate: core.Predicate, consumed: list[core.Triplet]):
+    def lookup(self, predicate: core.Predicate):
         lookup_data = [predicate.subject, predicate.verb, predicate.obj]
 
         for fact in self.triplets:
-            if fact not in consumed:
-                fact_data = [fact.subject, fact.verb, fact.obj]
-                matches = all(
-                    isinstance(lookup, core.Var) or lookup == fact
-                    for fact, lookup in zip(fact_data, lookup_data)
-                )
-                if matches:
-                    yield fact
+            fact_data = [fact.subject, fact.verb, fact.obj]
+            matches = all(
+                isinstance(lookup, core.Var)
+                or (isinstance(lookup, core.In) and fact_term in lookup.values)
+                or lookup == fact_term
+                for fact_term, lookup in zip(fact_data, lookup_data)
+            )
+            if matches:
+                yield fact
 
     def solve(self, predicates: list[core.Predicate]):
         return core.Query(predicates).solve_using(self)

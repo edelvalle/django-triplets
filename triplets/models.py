@@ -1,3 +1,4 @@
+import typing as t
 from dataclasses import dataclass
 
 import ulid
@@ -6,7 +7,7 @@ from django.db import models
 from . import core
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Triplet(core.Triplet):
     subject: str
     verb: str
@@ -22,17 +23,20 @@ class TripletQS(models.QuerySet):
         )
         return stored_triplet.id
 
-    def lookup(
-        self, predicate: core.Predicate, consumed: list["StoredTriplet"]
-    ):
-        query = {
-            term_name: term_value
-            for term_name, term_value in predicate.as_dict().items()
-            if isinstance(term_value, str)
-        }
-        return self.exclude(id__in=[c.id for c in consumed]).filter(**query)
+    def lookup(self, predicate: core.Predicate):
+        query: dict[str, str | set[str]] = {}
+        for name, value in predicate.as_dict().items():
+            if isinstance(value, str):
+                query[name] = value
+            elif isinstance(value, core.In):
+                query[f"{name}__in"] = value.values
+        return self.filter(**query)
 
-    def solve(self, query: core.Query | list):
+    def solve(self, query: core.Query | list) -> t.Iterable[core.Context]:
+        for solution in self.explain(query):
+            yield solution.context
+
+    def explain(self, query: core.Query | list) -> t.Iterable[core.Solution]:
         if isinstance(query, list):
             query = core.Query(query)
         return query.solve_using(self)

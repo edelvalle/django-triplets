@@ -65,7 +65,7 @@ class TestDjangoInference(TestCase):
             Predicate(Var("parent"), "child_of", Var("grandparent")),
             Predicate(Var("grandchild"), "child_of", Var("parent")),
         ]
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
@@ -87,7 +87,7 @@ class TestDjangoInference(TestCase):
             Predicate(Var("son"), "child_of", Var("parent")),
             Predicate(Var("son"), "gender", "m"),
         ]
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
@@ -97,12 +97,13 @@ class TestDjangoInference(TestCase):
                 ],
             )
 
+
     def test_solving_looking_for_siblings(self):
         query = [
             Predicate(Var("child1"), "child_of", Var("parent")),
             Predicate(Var("child2"), "child_of", Var("parent")),
         ]
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
