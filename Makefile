@@ -8,7 +8,10 @@ install:
 	python setup.py develop
 
 test:
-	cd tests; python manage.py test triplets
+	cd tests; python manage.py test triplets --keepdb
+
+coverage:
+	cd tests; coverage run manage.py test triplets --keepdb; coverage report
 
 shell:
 	cd tests; python manage.py shell

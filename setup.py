@@ -23,13 +23,14 @@ setup(
     extras_require={
         "dev": [
             "black",
-            "flake8",
-            "mypy",
-            "isort",
+            "coverage",
             "django-stubs-ext",
-            "ipython",
-            "mypy",
             "django",
+            "flake8",
+            "ipython",
+            "isort",
+            "mypy",
+            "mypy",
         ]
     },
     classifiers=[
