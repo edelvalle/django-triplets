@@ -6,7 +6,12 @@ from django.db import models
 
 from . import core
 
-INFERENCE_RULES: list[core.Rule] = getattr(settings, "INFERENCE_RULES", [])
+INFERENCE_RULES: list[core.Rule] = getattr(
+    settings, "TRIPLETS_INFERENCE_RULES", []
+)
+ML_SUBJECT, ML_VERB, ML_OBJ = getattr(
+    settings, "TRIPLETS_MAX_LENGTHS", (32, 32, 32)
+)
 
 
 class Triplet:
@@ -132,9 +137,9 @@ class StoredTriplet(models.Model):
     id = models.CharField(primary_key=True, max_length=32)
 
     # TODO: max_length here should be configurable
-    subject: str = models.CharField(max_length=32)
-    verb: str = models.CharField(max_length=32)
-    obj: str = models.CharField(max_length=32)
+    subject: str = models.CharField(max_length=ML_SUBJECT)
+    verb: str = models.CharField(max_length=ML_VERB)
+    obj: str = models.CharField(max_length=ML_VERB)
 
     is_inferred = models.BooleanField(db_index=True)
 
