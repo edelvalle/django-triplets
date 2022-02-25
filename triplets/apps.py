@@ -13,4 +13,8 @@ class TripletsConfig(AppConfig):
     name = "triplets"
 
     def ready(self):
-        post_migrate.connect(refresh_inference, sender=self)
+        post_migrate.connect(
+            refresh_inference,
+            sender=self,
+            dispatch_uid="triplets.refresh_inference",
+        )
