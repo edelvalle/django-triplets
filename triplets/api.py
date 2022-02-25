@@ -1,6 +1,17 @@
+from .core import Rule, Var, rule
 from .models import StoredTriplet
 
-__all__ = ["add", "remove", "solve", "explain", "refresh_inference"]
+__all__ = [
+    "Rule",
+    "Var",
+    "rule",
+    "add",
+    "bulk_add",
+    "remove",
+    "solve",
+    "explain",
+    "refresh_inference",
+]
 
 add = StoredTriplet.objects.add
 bulk_add = StoredTriplet.objects.bulk_add
