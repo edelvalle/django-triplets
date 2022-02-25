@@ -31,9 +31,14 @@ class Triplet:
 
 class StoredTripletQS(models.QuerySet):
     def add(self, triplet: core.Triplet) -> None:
+        """Adds a triplet to knowledge base."""
         self.bulk_add([triplet])
 
     def bulk_add(self, triplets: t.Sequence[core.Triplet]):
+        """Use this method to add many triplets to the knowledge base.
+
+        This method has better performance than adding the triplets one by one.
+        """
         self.bulk_create(
             StoredTriplet(
                 id=Triplet.storage_key(triplet),
@@ -48,6 +53,7 @@ class StoredTripletQS(models.QuerySet):
             )
 
     def remove(self, triplet: core.Triplet):
+        """Removes a triplet form the knowledge base"""
         stored_triplet = self.filter(id=Triplet.storage_key(triplet)).first()
         if stored_triplet.is_inferred:
             raise ValueError("You can't remove inferred triplets")
@@ -57,18 +63,18 @@ class StoredTripletQS(models.QuerySet):
         stored_triplet.delete()
         self._garbage_collect()
 
-    def solve(
-        self, query: core.ListOfPredicateTuples
-    ) -> t.Iterable[core.Context]:
-        for solution in self.explain(query):
-            yield solution.context
+    def solve(self, query: core.ListOfPredicateTuples) -> list[core.Context]:
+        """Solves the `query` and returns answers found"""
+        return [solution.context for solution in self.explain(query)]
 
-    def explain(
-        self, query: core.ListOfPredicateTuples
-    ) -> t.Iterable[core.Solution]:
+    def explain(self, query: core.ListOfPredicateTuples) -> list[core.Solution]:
+        """Solves the `query` and returns all Solutions so you can inspect from
+        which triplets those solutions are derived from
+        """
         return core.Query.from_tuples(query).solve(self._lookup)
 
     def refresh_inference(self):
+        """Runs all the settings.TRIPLETS_INFERENCE_RULES configured"""
         # remove inferences made by old rules
         current_rules_id = [r.id for r in INFERENCE_RULES]
         InferredSolution.objects.exclude(rule_id__in=current_rules_id).delete()
@@ -154,7 +160,7 @@ class StoredTriplet(models.Model):
         ]
 
     def __str__(self):
-        return " ".join(self)
+        return " -> ".join(self)
 
     def __iter__(self) -> t.Iterable[str]:
         return iter([self.subject, self.verb, self.obj])

@@ -16,10 +16,10 @@ class TestUsingDjango(TestCase):
         api.bulk_add(common.triplets)
 
     def solve(self, predicates: ListOfPredicateTuples):
-        return list(api.solve(predicates))
+        return api.solve(predicates)
 
     def explain(self, predicates: ListOfPredicateTuples):
-        return list(api.explain(predicates))
+        return api.explain(predicates)
 
     def assertNumQueriesBetween(
         self, lower, upper, func=None, *args, using=DEFAULT_DB_ALIAS, **kwargs
