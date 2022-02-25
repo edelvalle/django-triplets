@@ -34,7 +34,7 @@ TRIPLETS_MAX_LENGTHS: tuple(int, int, int) = (32, 32, 32)
 
 Do you remember Prolog? or Datalog? Well, this is kind of that.
 
-Given a Knowledge Base where is Fact is represented as a triplate in the form
+Given a Knowledge Base where each Fact is represented as a Triplate in the form
 `Triplet(subject, verb, object)`, you can represent things like:
 
 ```python
@@ -59,8 +59,8 @@ triplets = [
 ]
 ```
 
-This set of `triplets` represent directed graph where the verb represents
-an edge relating between two nodes.
+This set of `triplets` represents a directed graph where the verbs are the edges
+and subjects/objects the nodes?.
 
 You can store this in the database by doing:
 
@@ -81,11 +81,11 @@ assert answer == [
 ]
 ```
 
-Notice that `Var(name)` describes a place holder and when a solution for that
-particular query is found the name of the variable will be in the answers.
+Notice that `Var(name)` describes a placeholder and when a solution for that
+particular query is found, the name of the variable will be in the answers.
 
 Let's see another example, you can do the following if you wanna query all
-cities inside of european countries:
+cities inside of European countries:
 
 ```python
 answers = api.solve([
@@ -101,9 +101,9 @@ assert answer == [
 ]
 ```
 
-If you want to understand where all that is coming from, how did solver arrived
-to that conclusion use `triplets.api.explain()` and you will see each Solution
-from which triplets is derived from:
+If you want to understand where all that is coming from, how did the solver
+arrived to that conclusion use `triplets.api.explain()` and you will see each
+Solution from which triplets is derived from:
 
 ```python
 answers = api.explain([
@@ -143,14 +143,14 @@ assert answer == [
 ]
 ```
 
-PS: The results are never not in a praticular oder, so this assertions can fail
+PS: The results are never in a praticular oder, so these assertions can fail
 but they will contain the same information.
 
 ## Inference rules
 
 You can also configure inference rules to help you define relations that are
-inferred from existing triplets. This is of great help if you are trying to
-query complicated relations betwen nodes. Let's take a look.
+inferred from existing triplets. This is of helpful if you are trying to query
+complicated relations betwen nodes. Let's take a look.
 
 First configure your inference rules in the `settings.py` file:
 
@@ -169,7 +169,7 @@ TRIPLETS_INFERENCE_RULES = [
 ]
 ```
 
-When changing the inference rules you need to run do one of these:
+After changing the inference rules, you need to run at least one of these:
 - Run the db migrations of your project with: `python manage.py migrate`
 - Run refresh migrations: `python manage.py refresh_inference`
 - Call the `triplet.api.refresh_inference()` function
@@ -209,7 +209,7 @@ api.remove(("berlin", "part_of", "germany"))
 api.remove(("berlin", "located_in", "germany"))
 ```
 
-And it will cascade the over the inferred triplets; so "berlin", "spandau" and
+And it will propagate through the inferred triplets; so "berlin", "spandau" and
 "mitte" will be no longer *part_of* *germany*:
 
 ```python
@@ -246,14 +246,14 @@ That's it!
 
 ## Disclaimer about this Implementation
 
-- The query langauge is not recursive, so we can ensure termination. If you want
+- The query language is not recursive, so we can ensure termination. If you want
   to do complex recursive queries use inference rules.
 - Don't worry about optimizing your queries, the system will do it for you.
 - This is a Django specific implementation but inside `triplets.core` module is
   the logic that can be reused for any database as backend system.
-- Answers to queries are not any particular order, they are given as found in
+- Answers to queries are not in any particular order, they are given as found in
   the database.
-- The verb in a query predicate is always a string, can't be a variable.
+- The verb in a query predicate is always a string, it can't be a variable.
 - Adding or Removing triplets is heavy when you have inference rules in
   place.
 - In case you want to add many triplets you can reduce the amount of work the
