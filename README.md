@@ -76,7 +76,7 @@ After that you can make queries like:
 
 ```python
 answers = api.solve([(Var("country"), "located_in", "europe")])
-assert answer == [
+assert answers == [
     {"country": "germany"},
     {"country": "france"},
     {"country": "spain"},
@@ -95,7 +95,7 @@ answers = api.solve([
     (Var("country"), "located_in", "europe"),
 ])
 
-assert answer == [
+assert answers == [
     {'country': 'germany', 'city': 'berlin'},
     {'country': 'france', 'city': 'paris'},
     {'country': 'spain', 'city': 'madrid'},
@@ -113,7 +113,7 @@ answers = api.explain([
     (Var("country"), "located_in", "europe"),
 ])
 
-assert answer == [
+assert answers == [
     Solution(
         {'country': 'germany', 'city': 'berlin'},
         derived_from=frozenset({
