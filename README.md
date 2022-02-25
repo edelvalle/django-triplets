@@ -1,6 +1,6 @@
 # Django Triplets
 
-***No yet in pypi and NOT PRODUCTION READY for sure**
+**No yet in pypi and NOT PRODUCTION READY for sure**
 
 Bring some declarative logic programming into Django
 
