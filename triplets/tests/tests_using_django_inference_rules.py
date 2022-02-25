@@ -5,7 +5,7 @@ from . import common, common_django
 
 class TestInference(common_django.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
-        with self.assertNumQueriesBetween(55, 61):
+        with self.assertNumQueriesBetween(55, 67):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
@@ -27,7 +27,7 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_transition_from_a_set_of_rules_to_others(self):
-        with self.assertNumQueriesBetween(55, 61):
+        with self.assertNumQueriesBetween(55, 67):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
