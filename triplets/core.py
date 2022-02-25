@@ -141,7 +141,7 @@ class Predicate(t.Iterable):
         ]
 
     @property
-    def as_dict(self):
+    def as_dict(self) -> dict[str, Expression]:
         return dict(self.__dict__)
 
     @property
