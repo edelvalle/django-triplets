@@ -58,10 +58,6 @@ descendants_rules = [
 ]
 
 
-def derived_from_hash(triplets: frozenset[core.Triplet]) -> str:
-    return core.storage_hash(str(triplets))
-
-
 @dataclass
 class Database:
 

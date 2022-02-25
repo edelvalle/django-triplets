@@ -162,9 +162,6 @@ class StoredTriplet(models.Model):
     def __str__(self):
         return " -> ".join(self)
 
-    def __iter__(self) -> t.Iterable[str]:
-        return iter([self.subject, self.verb, self.obj])
-
 
 class InferredSolution(models.Model):
     """When a Triplet is inferred from a Rule and a set of triplets
