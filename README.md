@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "triplets",
     ...
 ]
+```
 
 The configuration options are:
 
