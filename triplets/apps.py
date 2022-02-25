@@ -5,7 +5,9 @@ from django.db.models.signals import post_migrate
 def refresh_inference(sender, **kwargs):
     from . import api
 
+    print("Refreshing inference rules... ", end="", flush=True)
     api.refresh_inference()
+    print("OK")
 
 
 class TripletsConfig(AppConfig):
