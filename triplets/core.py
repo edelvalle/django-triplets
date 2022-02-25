@@ -58,6 +58,10 @@ Expression = str | Var | In
 def expression_matches(
     expression: Expression, value: str
 ) -> t.Optional[dict[str, str]]:
+    """Returns the micro solution of matching an Expression over a value.
+
+    Returning None means that there was no match
+    """
     if isinstance(expression, str):
         return {} if expression == value else None
     elif isinstance(expression, In):
