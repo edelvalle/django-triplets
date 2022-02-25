@@ -1,0 +1,8 @@
+name: Run tests
+on: [push]
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: python-latest
+    steps:
+      - run: make install
+      - run: make coverage
