@@ -36,7 +36,6 @@ class StoredTripletQS(models.QuerySet):
 
     def bulk_add(self, triplets: t.Sequence[core.Triplet]):
         """Use this method to add many triplets to the knowledge base.
-
         This method has better performance than adding the triplets one by one.
         """
         self.bulk_create(
@@ -74,7 +73,9 @@ class StoredTripletQS(models.QuerySet):
         return core.Query.from_tuples(query).solve(self._lookup)
 
     def refresh_inference(self):
-        """Runs all the settings.TRIPLETS_INFERENCE_RULES configured"""
+        """Runs all the settings.TRIPLETS_INFERENCE_RULES configured agains the
+        knowledge base to keep it consistent.
+        """
         # remove inferences made by old rules
         current_rules_id = [r.id for r in INFERENCE_RULES]
         InferredSolution.objects.exclude(rule_id__in=current_rules_id).delete()
@@ -142,7 +143,6 @@ class StoredTripletQS(models.QuerySet):
 class StoredTriplet(models.Model):
     id = models.CharField(primary_key=True, max_length=32)
 
-    # TODO: max_length here should be configurable
     subject: str = models.CharField(max_length=ML_SUBJECT)
     verb: str = models.CharField(max_length=ML_VERB)
     obj: str = models.CharField(max_length=ML_VERB)

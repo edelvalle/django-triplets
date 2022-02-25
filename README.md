@@ -102,7 +102,7 @@ assert answer == [
 ```
 
 If you want to understand where all that is coming from, how did solver arrived
-to that conclusion use `triplets.api.explain` and you will see each Solution
+to that conclusion use `triplets.api.explain()` and you will see each Solution
 from which triplets is derived from:
 
 ```python
