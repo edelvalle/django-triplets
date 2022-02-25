@@ -1,8 +1,16 @@
 name: Run tests
 on: [push]
 jobs:
-  Explore-GitHub-Actions:
-    runs-on: python-latest
+  test:
+    runs-on: ubuntu-latest
     steps:
-      - run: make install
-      - run: make coverage
+    - name: Code checkout
+      uses: actions/checkout@v2
+    - name: Get python ready
+      uses: actions/setup-python@v2
+    - name: Install Dependencies
+      run: |
+        make install
+    - name: Run Tests
+      run: |
+        make coverage
