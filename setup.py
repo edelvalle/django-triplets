@@ -19,7 +19,7 @@ setup(
     include_package_data=True,
     zip_safe=True,
     python_requires=">=3.9",
-    install_requires=["ulid-py>=1,<2", "django>=3.2"],
+    install_requires=["django>=3.2"],
     extras_require={
         "dev": [
             "black",
