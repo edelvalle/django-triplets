@@ -1,5 +1,5 @@
 
-.PHONY: test install
+.PHONY: test install shell migrations
 
 
 install:
@@ -9,3 +9,9 @@ install:
 
 test:
 	cd tests; python manage.py test triplets
+
+shell:
+	cd tests; python manage.py shell
+
+migrations:
+	cd tests; python manage.py makemigrations

@@ -1,115 +1,123 @@
-from django.test import TestCase
-
-from ..core import Predicate, Var
-from ..models import StoredTriplet
-from . import common
+from ..core import Var
+from . import common_django
 
 
-class TestDjangoInference(TestCase):
+class TestDjango(common_django.TestUsingDjango):
     def setUp(self):
-        for triplet in common.triplets:
-            StoredTriplet.objects.add(triplet)
-
-    def solve(self, *args, **kwargs):
-        return list(StoredTriplet.objects.solve(*args, **kwargs))
+        self.populate_db([])
 
     def test_solving_single_query_with_two_variables(self):
-        query = [Predicate(Var("child"), "child_of", Var("parent"))]
+        query = [(Var("child"), "child_of", Var("parent"))]
         with self.assertNumQueries(1):
             self.assertListEqual(
                 self.solve(query),
                 [
-                    {"child": "perico", "parent": "emilio"},
-                    {"child": "juan", "parent": "maria"},
-                    {"child": "juana", "parent": "maria"},
-                    {"child": "juan", "parent": "perico"},
-                    {"child": "juana", "parent": "perico"},
+                    {"child": "brother", "parent": "father"},
+                    {"child": "sister", "parent": "father"},
+                    {"child": "father", "parent": "grandfather"},
+                    {"child": "brother", "parent": "mother"},
+                    {"child": "sister", "parent": "mother"},
                 ],
             )
 
     def test_solving_single_query_with_subject_variables(self):
-        query = [Predicate(Var("child"), "child_of", "perico")]
+        query = [(Var("child"), "child_of", "father")]
         with self.assertNumQueries(1):
             self.assertListEqual(
                 self.solve(query),
                 [
-                    {"child": "juan"},
-                    {"child": "juana"},
+                    {"child": "brother"},
+                    {"child": "sister"},
                 ],
             )
 
     def test_solving_single_query_with_object_variables(self):
-        query = [Predicate("juan", "child_of", Var("parent"))]
-
+        query = [("brother", "child_of", Var("parent"))]
         with self.assertNumQueries(1):
             self.assertListEqual(
                 self.solve(query),
                 [
-                    {"parent": "perico"},
-                    {"parent": "maria"},
+                    {"parent": "father"},
+                    {"parent": "mother"},
                 ],
             )
 
     def test_solving_single_query_with_true_fact(self):
-        query = [Predicate("juan", "child_of", "perico")]
+        query = [("brother", "child_of", "father")]
         with self.assertNumQueries(1):
             self.assertListEqual(self.solve(query), [{}])
 
     def test_solving_single_query_with_false_fact(self):
-        query = [Predicate("juan", "child_of", "X")]
+        query = [("brother", "child_of", "X")]
         with self.assertNumQueries(1):
             self.assertListEqual(self.solve(query), [])
 
     def test_solving_multiple_queries(self):
         query = [
-            Predicate(Var("parent"), "child_of", Var("grandparent")),
-            Predicate(Var("grandchild"), "child_of", Var("parent")),
+            (Var("parent"), "child_of", Var("grandparent")),
+            (Var("grandchild"), "child_of", Var("parent")),
         ]
         with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
                     {
-                        "parent": "perico",
-                        "grandchild": "juan",
-                        "grandparent": "emilio",
+                        "parent": "father",
+                        "grandchild": "brother",
+                        "grandparent": "grandfather",
                     },
                     {
-                        "grandchild": "juana",
-                        "parent": "perico",
-                        "grandparent": "emilio",
+                        "grandchild": "sister",
+                        "parent": "father",
+                        "grandparent": "grandfather",
                     },
                 ],
             )
 
     def test_solving_multiple_queries_looking_for_male_son(self):
         query = [
-            Predicate(Var("son"), "child_of", Var("parent")),
-            Predicate(Var("son"), "gender", "m"),
+            (Var("son"), "child_of", Var("parent")),
+            (Var("son"), "gender", "m"),
         ]
         with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
-                    {"son": "juan", "parent": "perico"},
-                    {"son": "juan", "parent": "maria"},
-                    {"son": "perico", "parent": "emilio"},
+                    {"son": "brother", "parent": "father"},
+                    {"son": "brother", "parent": "mother"},
+                    {"son": "father", "parent": "grandfather"},
                 ],
             )
 
-
     def test_solving_looking_for_siblings(self):
         query = [
-            Predicate(Var("child1"), "child_of", Var("parent")),
-            Predicate(Var("child2"), "child_of", Var("parent")),
+            (Var("child1"), "child_of", Var("parent")),
+            (Var("child2"), "child_of", Var("parent")),
         ]
+
         with self.assertNumQueries(2):
             self.assertListEqual(
                 self.solve(query),
                 [
-                    {"child1": "juan", "child2": "juana", "parent": "maria"},
-                    {"child1": "juana", "child2": "juan", "parent": "maria"},
-                    {"child1": "juan", "child2": "juana", "parent": "perico"},
-                    {"child1": "juana", "child2": "juan", "parent": "perico"},
+                    {
+                        "child1": "brother",
+                        "child2": "sister",
+                        "parent": "father",
+                    },
+                    {
+                        "child1": "sister",
+                        "child2": "brother",
+                        "parent": "father",
+                    },
+                    {
+                        "child1": "brother",
+                        "child2": "sister",
+                        "parent": "mother",
+                    },
+                    {
+                        "child1": "sister",
+                        "child2": "brother",
+                        "parent": "mother",
+                    },
                 ],
             )

@@ -1,8 +1,16 @@
 from unittest import TestCase
 
-from ..core import In, Predicate, Query, Solution, Var, substitute_using
+from ..core import (
+    In,
+    ListOfPredicateTuples,
+    Predicate,
+    Predicates,
+    Query,
+    Solution,
+    Var,
+    substitute_using,
+)
 from . import common
-from .common import Triplet
 
 
 class TestExpressions(TestCase):
@@ -121,46 +129,49 @@ class TestPredicate(TestCase):
         )
 
     def test_variable_names_returns_the_name_of_the_variables(self):
-        self.assertTupleEqual(
+        self.assertListEqual(
             Predicate(Var("person"), "son_of", Var("parent")).variable_names,
-            ("person", "parent"),
+            ["person", "parent"],
         )
-        self.assertTupleEqual(
+        self.assertListEqual(
             Predicate("subject", "verb", "obj").variable_names,
-            (None, None),
+            [],
         )
-        self.assertTupleEqual(
+        self.assertListEqual(
             Predicate(Var("subject"), "verb", "obj").variable_names,
-            ("subject", None),
+            ["subject"],
         )
-        self.assertTupleEqual(
+        self.assertListEqual(
             Predicate("subject", "verb", Var("obj")).variable_names,
-            (None, "obj"),
+            ["obj"],
         )
-        self.assertTupleEqual(
+        self.assertListEqual(
             Predicate(In("subject", {}), "verb", Var("obj")).variable_names,
-            ("subject", "obj"),
+            ["subject", "obj"],
         )
 
 
 class TestQuery(TestCase):
-    db = common.Database(common.triplets)
+    def setUp(self):
+        self.db = common.Database()
+        for triplet in common.triplets:
+            self.db.add(triplet)
 
-    def solve(self, *args, **kwargs):
-        return list(self.db.solve(*args, **kwargs))
+    def solve(self, predicates: ListOfPredicateTuples) -> list[Solution]:
+        return list(self.db.solve(predicates))
 
     def test_optimization_makes_less_abstract_query_be_first_without_solutions(
         self,
     ):
         p1, p2, p3 = [
             Predicate(Var("sibling"), "child_of", Var("parent")),
-            Predicate("Juan", "child_of", Var("parent")),
+            Predicate("brother", "child_of", Var("parent")),
             Predicate(
-                In("sibling", {"Juan", "Pepe"}), "child_of", Var("parent")
+                In("sibling", {"brother", "Pepe"}), "child_of", Var("parent")
             ),
         ]
-        query = Query([p1, p2, p3])
-        self.assertListEqual(query._optimized_predicates, [p2, p3, p1])
+        query = Query(Predicates([p1, p2, p3]))
+        self.assertListEqual(query.optimized_predicates, [p2, p3, p1])
 
     def test_optimization_makes_less_abstract_query_be_first_with_solutions(
         self,
@@ -170,98 +181,98 @@ class TestQuery(TestCase):
             Predicate(Var("parent"), "child_of", Var("grandparent")),
         ]
         query = Query(
-            [p1, p2],
+            Predicates([p1, p2]),
             solutions=[Solution({"grandparent": "X"}, frozenset())],
         )
         self.assertListEqual(
-            query._optimized_predicates,
+            query.optimized_predicates,
             [Predicate(Var("parent"), "child_of", "X"), p1],
         )
 
     def test_solving_single_query_with_two_variables(self):
-        query = [Predicate(Var("child"), "child_of", Var("parent"))]
+        query = [(Var("child"), "child_of", Var("parent"))]
         self.assertListEqual(
             [solution.context for solution in self.solve(query)],
             [
-                {"child": "juan", "parent": "perico"},
-                {"child": "juan", "parent": "maria"},
-                {"child": "juana", "parent": "perico"},
-                {"child": "juana", "parent": "maria"},
-                {"child": "perico", "parent": "emilio"},
+                {"child": "brother", "parent": "father"},
+                {"child": "brother", "parent": "mother"},
+                {"child": "sister", "parent": "father"},
+                {"child": "sister", "parent": "mother"},
+                {"child": "father", "parent": "grandfather"},
             ],
         )
 
     def test_solving_single_query_with_subject_variables(self):
-        query = [Predicate(Var("child"), "child_of", "perico")]
+        query = [(Var("child"), "child_of", "father")]
         self.assertListEqual(
             self.solve(query),
             [
                 Solution(
-                    {"child": "juan"},
-                    {Triplet("juan", "child_of", "perico")},
+                    {"child": "brother"},
+                    {("brother", "child_of", "father")},
                 ),
                 Solution(
-                    {"child": "juana"},
-                    {Triplet("juana", "child_of", "perico")},
+                    {"child": "sister"},
+                    {("sister", "child_of", "father")},
                 ),
             ],
         )
 
     def test_solving_single_query_with_object_variables(self):
-        query = [Predicate("juan", "child_of", Var("parent"))]
+        query = [("brother", "child_of", Var("parent"))]
         self.assertListEqual(
             self.solve(query),
             [
                 Solution(
-                    {"parent": "perico"},
-                    {Triplet("juan", "child_of", "perico")},
+                    {"parent": "father"},
+                    {("brother", "child_of", "father")},
                 ),
                 Solution(
-                    {"parent": "maria"},
-                    {Triplet("juan", "child_of", "maria")},
+                    {"parent": "mother"},
+                    {("brother", "child_of", "mother")},
                 ),
             ],
         )
 
     def test_solving_single_query_with_true_fact(self):
-        query = [Predicate("juan", "child_of", "perico")]
+        query = [("brother", "child_of", "father")]
         self.assertListEqual(
             self.solve(query),
-            [Solution({}, {Triplet("juan", "child_of", "perico")})],
+            [Solution({}, {("brother", "child_of", "father")})],
         )
 
     def test_solving_single_query_with_false_fact(self):
-        query = [Predicate("juan", "child_of", "X")]
+        query = [("brother", "child_of", "X")]
         self.assertListEqual(self.solve(query), [])
 
     def test_solving_multiple_queries(self):
         query = [
-            Predicate(Var("grandchild"), "child_of", Var("parent")),
-            Predicate(Var("parent"), "child_of", Var("grandparent")),
+            (Var("grandchild"), "child_of", Var("parent")),
+            (Var("parent"), "child_of", Var("grandparent")),
         ]
         self.assertListEqual(
             self.solve(query),
             [
                 Solution(
                     {
-                        "grandchild": "juan",
-                        "parent": "perico",
-                        "grandparent": "emilio",
+                        "grandchild": "brother",
+                        "parent": "father",
+                        "grandparent": "grandfather",
                     },
                     {
-                        Triplet("juan", "child_of", "perico"),
-                        Triplet("perico", "child_of", "emilio"),
+                        ("brother", "child_of", "father"),
+                        ("father", "child_of", "grandfather"),
                     },
                 ),
                 Solution(
                     {
-                        "grandchild": "juana",
-                        "parent": "perico",
-                        "grandparent": "emilio",
+                        "grandchild": "sister",
+                        "parent": "father",
+                        "grandparent": "grandfather",
                     },
                     {
-                        Triplet("juana", "child_of", "perico"),
-                        Triplet("perico", "child_of", "emilio"),
+                        ("sister", "child_of", "father"),
+                        ("father", "child_of", "grandfather"),
                     },
                 ),
             ],
@@ -269,32 +280,32 @@ class TestQuery(TestCase):
 
     def test_solving_multiple_queries_looking_for_male_son(self):
         query = [
-            Predicate(Var("son"), "child_of", Var("parent")),
-            Predicate(Var("son"), "gender", "m"),
+            (Var("son"), "child_of", Var("parent")),
+            (Var("son"), "gender", "m"),
         ]
 
         self.assertListEqual(
             self.solve(query),
             [
                 Solution(
-                    {"son": "juan", "parent": "perico"},
+                    {"son": "brother", "parent": "father"},
                     {
-                        Triplet("juan", "child_of", "perico"),
-                        Triplet("juan", "gender", "m"),
+                        ("brother", "child_of", "father"),
+                        ("brother", "gender", "m"),
                     },
                 ),
                 Solution(
-                    {"son": "juan", "parent": "maria"},
+                    {"son": "brother", "parent": "mother"},
                     {
-                        Triplet("juan", "child_of", "maria"),
-                        Triplet("juan", "gender", "m"),
+                        ("brother", "child_of", "mother"),
+                        ("brother", "gender", "m"),
                     },
                 ),
                 Solution(
-                    {"son": "perico", "parent": "emilio"},
+                    {"son": "father", "parent": "grandfather"},
                     {
-                        Triplet("perico", "gender", "m"),
-                        Triplet("perico", "child_of", "emilio"),
+                        ("father", "gender", "m"),
+                        ("father", "child_of", "grandfather"),
                     },
                 ),
             ],
@@ -302,38 +313,54 @@ class TestQuery(TestCase):
 
     def test_solving_looking_for_siblings(self):
         query = [
-            Predicate(Var("child1"), "child_of", Var("parent")),
-            Predicate(Var("child2"), "child_of", Var("parent")),
+            (Var("child1"), "child_of", Var("parent")),
+            (Var("child2"), "child_of", Var("parent")),
         ]
         self.assertListEqual(
             self.solve(query),
             [
                 Solution(
-                    {"child1": "juan", "child2": "juana", "parent": "perico"},
                     {
-                        Triplet("juan", "child_of", "perico"),
-                        Triplet("juana", "child_of", "perico"),
+                        "child1": "brother",
+                        "child2": "sister",
+                        "parent": "father",
+                    },
+                    {
+                        ("brother", "child_of", "father"),
+                        ("sister", "child_of", "father"),
                     },
                 ),
                 Solution(
-                    {"child1": "juan", "child2": "juana", "parent": "maria"},
                     {
-                        Triplet("juan", "child_of", "maria"),
-                        Triplet("juana", "child_of", "maria"),
+                        "child1": "brother",
+                        "child2": "sister",
+                        "parent": "mother",
+                    },
+                    {
+                        ("brother", "child_of", "mother"),
+                        ("sister", "child_of", "mother"),
                     },
                 ),
                 Solution(
-                    {"child1": "juana", "child2": "juan", "parent": "perico"},
                     {
-                        Triplet("juan", "child_of", "perico"),
-                        Triplet("juana", "child_of", "perico"),
+                        "child1": "sister",
+                        "child2": "brother",
+                        "parent": "father",
+                    },
+                    {
+                        ("brother", "child_of", "father"),
+                        ("sister", "child_of", "father"),
                     },
                 ),
                 Solution(
-                    {"child1": "juana", "child2": "juan", "parent": "maria"},
                     {
-                        Triplet("juan", "child_of", "maria"),
-                        Triplet("juana", "child_of", "maria"),
+                        "child1": "sister",
+                        "child2": "brother",
+                        "parent": "mother",
+                    },
+                    {
+                        ("brother", "child_of", "mother"),
+                        ("sister", "child_of", "mother"),
                     },
                 ),
             ],
