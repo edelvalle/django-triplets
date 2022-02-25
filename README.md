@@ -1,3 +1,5 @@
+[![Run tests](https://github.com/edelvalle/django-triplets/actions/workflows/github-actions-test.yml/badge.svg)](https://github.com/edelvalle/django-triplets/actions/workflows/github-actions-test.yml)
+
 # Django Triplets
 
 **No yet in pypi and NOT PRODUCTION READY for sure**
