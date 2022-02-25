@@ -24,9 +24,23 @@ class Triplet:
         return {"subject": subject, "verb": verb, "obj": obj}
 
 
-class TripletQS(models.QuerySet):
+class StoredTripletQS(models.QuerySet):
     def add(self, triplet: core.Triplet) -> None:
-        self._add(triplet, is_inferred=False)
+        self.bulk_add([triplet])
+
+    def bulk_add(self, triplets: t.Sequence[core.Triplet]):
+        self.bulk_create(
+            StoredTriplet(
+                id=Triplet.storage_key(triplet),
+                is_inferred=False,
+                **Triplet.as_dict(triplet),
+            )
+            for triplet in triplets
+        )
+        for triplet in triplets:
+            core.run_rules_matching(
+                triplet, INFERENCE_RULES, self._lookup, self._add_by_rule
+            )
 
     def remove(self, triplet: core.Triplet):
         stored_triplet = self.filter(id=Triplet.storage_key(triplet)).first()
@@ -58,23 +72,21 @@ class TripletQS(models.QuerySet):
         # run the current rules on the whole DB
         core.refresh_rules(INFERENCE_RULES, self._lookup, self._add_by_rule)
 
-    def _add(self, triplet: core.Triplet, *, is_inferred: bool) -> None:
-        stored_triplet, created = self.get_or_create(
-            id=Triplet.storage_key(triplet),
-            defaults=Triplet.as_dict(triplet) | {"is_inferred": is_inferred},
-        )
-        if created:
-            core.run_rules_matching(
-                triplet, INFERENCE_RULES, self._lookup, self._add_by_rule
-            )
-
     def _add_by_rule(
         self,
         triplet: core.Triplet,
         rule_id: str,
         base_triplets: frozenset[core.Triplet],
     ):
-        self._add(triplet, is_inferred=True)
+        _, created = self.get_or_create(
+            id=Triplet.storage_key(triplet),
+            defaults=Triplet.as_dict(triplet) | {"is_inferred": True},
+        )
+        if created:
+            core.run_rules_matching(
+                triplet, INFERENCE_RULES, self._lookup, self._add_by_rule
+            )
+
         InferredSolution.objects.get_or_create(
             inferred_triplet_id=Triplet.storage_key(triplet),
             rule_id=rule_id,
@@ -126,7 +138,7 @@ class StoredTriplet(models.Model):
 
     is_inferred = models.BooleanField(db_index=True)
 
-    objects: TripletQS = TripletQS.as_manager()
+    objects: StoredTripletQS = StoredTripletQS.as_manager()
 
     class Meta:
         unique_together = [["subject", "verb", "obj"]]

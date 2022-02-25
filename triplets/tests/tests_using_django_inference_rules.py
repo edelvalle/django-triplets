@@ -1,11 +1,11 @@
-from .. import models
+from .. import api, models
 from ..core import Solution, Var
 from . import common, common_django
 
 
 class TestInference(common_django.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
-        with self.assertNumQueries(86):
+        with self.assertNumQueriesBetween(55, 61):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
@@ -27,16 +27,16 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_transition_from_a_set_of_rules_to_others(self):
-        with self.assertNumQueries(86):
+        with self.assertNumQueriesBetween(55, 61):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
             solutions = self.solve([(Var("a"), "descendant_of", Var("b"))])
             self.assertListEqual(solutions, [])
 
-        with self.assertNumQueries(95):
+        with self.assertNumQueriesBetween(95, 98):
             models.INFERENCE_RULES = common.descendants_rules
-            models.StoredTriplet.objects.refresh_inference()
+            api.refresh_inference()
 
         with self.assertNumQueries(1):
             solutions = self.explain([(Var("a"), "descendant_of", Var("b"))])
@@ -77,13 +77,11 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_deleting_a_primary_triplet_deletes_its_deductions(self):
-        with self.assertNumQueries(129):
+        with self.assertNumQueries(90):
             self.populate_db(common.descendants_rules)
 
         with self.assertNumQueries(22):
-            models.StoredTriplet.objects.remove(
-                ("father", "child_of", "grandfather")
-            )
+            api.remove(("father", "child_of", "grandfather"))
 
         with self.assertNumQueries(1):
             solutions = self.explain([(Var("a"), "descendant_of", Var("b"))])
@@ -110,11 +108,9 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_cant_delete_deduced_triplets(self):
-        with self.assertNumQueries(129):
+        with self.assertNumQueries(90):
             self.populate_db(common.descendants_rules)
 
         with self.assertNumQueries(1):
             with self.assertRaises(ValueError):
-                models.StoredTriplet.objects.remove(
-                    ("sister", "descendant_of", "grandfather")
-                )
+                api.remove(("sister", "descendant_of", "grandfather"))
