@@ -339,8 +339,7 @@ def _run_rules(
     add: AddOrRemoveFunction,
 ):
     for rule, original_rule_id in rules_and_ids:
-        triplets_and_bases = list(rule.run(lookup))
-        if triplets_and_bases:
+        if triplets_and_bases := list(rule.run(lookup)):
             add(original_rule_id, triplets_and_bases)
             for triplet, _ in triplets_and_bases:
                 run_rules_matching(triplet, original_rules, lookup, add)
