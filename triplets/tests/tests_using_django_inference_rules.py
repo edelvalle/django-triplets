@@ -9,7 +9,7 @@ class TestInference(common_django.TestUsingDjango):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
-            solutions = self.explain(
+            solutions = self.explain_solutions(
                 [(Var("sibling1"), "sibling_of", Var("sibling2"))]
             )
             self.assertListEqual(
@@ -39,7 +39,9 @@ class TestInference(common_django.TestUsingDjango):
             api.refresh_inference()
 
         with self.assertNumQueries(1):
-            solutions = self.explain([(Var("a"), "descendant_of", Var("b"))])
+            solutions = self.explain_solutions(
+                [(Var("a"), "descendant_of", Var("b"))]
+            )
             self.assertListEqual(
                 solutions,
                 [
@@ -84,7 +86,9 @@ class TestInference(common_django.TestUsingDjango):
             api.remove(("father", "child_of", "grandfather"))
 
         with self.assertNumQueries(1):
-            solutions = self.explain([(Var("a"), "descendant_of", Var("b"))])
+            solutions = self.explain_solutions(
+                [(Var("a"), "descendant_of", Var("b"))]
+            )
             self.assertListEqual(
                 solutions,
                 [

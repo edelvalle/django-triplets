@@ -104,11 +104,11 @@ assert answers == [
 ```
 
 If you want to understand where all that is coming from, how did the solver
-arrived to that conclusion use `triplets.api.explain()` and you will see each
-Solution from which triplets is derived from:
+arrived to that conclusion use `triplets.api.explain_solutions()` and you will
+see each Solution from which triplets is derived from:
 
 ```python
-answers = api.explain([
+answers = api.explain_solutions([
     (Var("city"), "located_in", Var("country")),
     (Var("country"), "located_in", "europe"),
 ])
@@ -262,4 +262,4 @@ That's it!
   engine has to do by using `triplets.api.bulk_add(t.Sequence[core.Triplet])`.
 - This implementation is fast at reading doing just N queries to the database,
   being N the amount of predicates you pass to `triplets.api.solve()` or
-  `triplets.api.explain()`.
+  `triplets.api.explain_solutions()`.

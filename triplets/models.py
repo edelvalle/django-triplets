@@ -64,9 +64,11 @@ class StoredTripletQS(models.QuerySet):
 
     def solve(self, query: core.ListOfPredicateTuples) -> list[core.Context]:
         """Solves the `query` and returns answers found"""
-        return [solution.context for solution in self.explain(query)]
+        return [solution.context for solution in self.explain_solutions(query)]
 
-    def explain(self, query: core.ListOfPredicateTuples) -> list[core.Solution]:
+    def explain_solutions(
+        self, query: core.ListOfPredicateTuples
+    ) -> list[core.Solution]:
         """Solves the `query` and returns all Solutions so you can inspect from
         which triplets those solutions are derived from
         """

@@ -18,8 +18,8 @@ class TestUsingDjango(TestCase):
     def solve(self, predicates: ListOfPredicateTuples):
         return api.solve(predicates)
 
-    def explain(self, predicates: ListOfPredicateTuples):
-        return api.explain(predicates)
+    def explain_solutions(self, predicates: ListOfPredicateTuples):
+        return api.explain_solutions(predicates)
 
     def assertNumQueriesBetween(
         self, lower, upper, func=None, *args, using=DEFAULT_DB_ALIAS, **kwargs

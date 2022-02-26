@@ -9,7 +9,7 @@ __all__ = [
     "bulk_add",
     "remove",
     "solve",
-    "explain",
+    "explain_solutions",
     "refresh_inference",
 ]
 
@@ -17,5 +17,5 @@ add = StoredTriplet.objects.add
 bulk_add = StoredTriplet.objects.bulk_add
 remove = StoredTriplet.objects.remove
 solve = StoredTriplet.objects.solve
-explain = StoredTriplet.objects.explain
+explain_solutions = StoredTriplet.objects.explain_solutions
 refresh_inference = StoredTriplet.objects.refresh_inference
