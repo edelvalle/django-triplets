@@ -1,6 +1,7 @@
 *.egg-info/
 *.eggs/
 *.sqlite3
+*.lprof
 .envrc
 dist/
 __pycache__/

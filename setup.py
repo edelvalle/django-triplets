@@ -30,7 +30,7 @@ setup(
             "ipython",
             "isort",
             "mypy",
-            "mypy",
+            "line-profiler",
         ]
     },
     classifiers=[
