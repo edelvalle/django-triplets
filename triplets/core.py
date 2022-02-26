@@ -227,16 +227,11 @@ class Query:
     def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
         if self.predicates and self.solutions:
             predicate, *predicates = self.optimized_predicates
-            # predicate_solutions = [
-            #     match
-            #     for triplet in lookup(predicate)
-            #     if (match := predicate.matches(triplet)) is not None
-            # ]
-            predicate_solutions = []
-            for triplet in lookup(predicate):
-                if (match := predicate.matches(triplet)) is not None:
-                    predicate_solutions.append(match)
-            #
+            predicate_solutions = [
+                match
+                for triplet in lookup(predicate)
+                if (match := predicate.matches(triplet)) is not None
+            ]
             next_query = Query(
                 Predicates(predicates),
                 solutions=list(
