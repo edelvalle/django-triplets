@@ -117,7 +117,7 @@ class StoredTripletQS(models.QuerySet):
                 InferredSolution(
                     inferred_triplet_id=key,
                     rule_id=rule_id,
-                    base_triplets_hash=bases_hash,
+                    solution_hash=key + bases_hash,
                 )
                 for key, _, bases_hash in keys_triplets_bases_hash
             ),
@@ -131,13 +131,14 @@ class StoredTripletQS(models.QuerySet):
             tuple[core.Triplet, frozenset[core.Triplet]]
         ],
     ):
-        q = models.Q()
-        for triplet, bases in triplets_and_bases:
-            q |= models.Q(
-                inferred_triplet_id=Triplet.storage_key(triplet),
-                base_triplets_hash=Triplet.storage_key_for_many(bases),
-            )
-        InferredSolution.objects.filter(rule_id=rule_id).filter(q).delete()
+        InferredSolution.objects.filter(
+            rule_id=rule_id,
+            solution_hash__in=[
+                Triplet.storage_key(triplet)
+                + Triplet.storage_key_for_many(bases)
+                for triplet, bases in triplets_and_bases
+            ],
+        ).delete()
 
     def _lookup(self, predicate: core.Predicate) -> t.Iterable[core.Triplet]:
         "This is used by the core engine to lookup predicates in the database"
@@ -199,9 +200,9 @@ class InferredSolution(models.Model):
         related_name="inferred_by",
     )
     rule_id: str = models.CharField(max_length=32, db_index=True)
-    base_triplets_hash = models.CharField(max_length=32)
+
+    # join of inferred_triplet_id and base_triplets_hash
+    solution_hash = models.CharField(max_length=64)
 
     class Meta:
-        unique_together = [
-            ["inferred_triplet", "rule_id", "base_triplets_hash"]
-        ]
+        unique_together = [["rule_id", "solution_hash"]]
