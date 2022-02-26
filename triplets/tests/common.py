@@ -156,9 +156,6 @@ class Database:
     ):
         for triplet, derived_from in triplets_and_bases:
             self.dependencies_of[triplet].remove((rule_id, derived_from))
-            core.run_rules_matching(
-                triplet, self.rules, self.lookup, self._remove_by_rule
-            )
 
     def _garbage_collect(self):
         to_delete = [

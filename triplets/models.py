@@ -89,7 +89,7 @@ class StoredTripletQS(models.QuerySet):
     def _add_by_rule(
         self,
         rule_id: str,
-        triplets_and_bases: t.Iterable[
+        triplets_and_bases: t.Sequence[
             tuple[core.Triplet, frozenset[core.Triplet]]
         ],
     ):
@@ -101,59 +101,43 @@ class StoredTripletQS(models.QuerySet):
             )
             for triplet, bases in triplets_and_bases
         ]
-        if keys_triplets_bases_hash:
-            self.bulk_create(
-                (
-                    StoredTriplet(
-                        id=key,
-                        is_inferred=True,
-                        **Triplet.as_dict(triplet),
-                    )
-                    for key, triplet, _ in keys_triplets_bases_hash
-                ),
-                ignore_conflicts=True,
-            )
-            InferredSolution.objects.bulk_create(
-                (
-                    InferredSolution(
-                        inferred_triplet_id=key,
-                        rule_id=rule_id,
-                        base_triplets_hash=bases_hash,
-                    )
-                    for key, _, bases_hash in keys_triplets_bases_hash
-                ),
-                ignore_conflicts=True,
-            )
-            for _, triplet, _ in keys_triplets_bases_hash:
-                core.run_rules_matching(
-                    triplet, INFERENCE_RULES, self._lookup, self._add_by_rule
+        self.bulk_create(
+            (
+                StoredTriplet(
+                    id=key,
+                    is_inferred=True,
+                    **Triplet.as_dict(triplet),
                 )
+                for key, triplet, _ in keys_triplets_bases_hash
+            ),
+            ignore_conflicts=True,
+        )
+        InferredSolution.objects.bulk_create(
+            (
+                InferredSolution(
+                    inferred_triplet_id=key,
+                    rule_id=rule_id,
+                    base_triplets_hash=bases_hash,
+                )
+                for key, _, bases_hash in keys_triplets_bases_hash
+            ),
+            ignore_conflicts=True,
+        )
 
     def _remove_by_rule(
         self,
         rule_id: str,
-        triplets_and_bases: t.Iterable[
+        triplets_and_bases: t.Sequence[
             tuple[core.Triplet, frozenset[core.Triplet]]
         ],
     ):
-        triplets = []
         q = models.Q()
         for triplet, bases in triplets_and_bases:
-            triplets.append(triplet)
             q |= models.Q(
                 inferred_triplet_id=Triplet.storage_key(triplet),
                 base_triplets_hash=Triplet.storage_key_for_many(bases),
             )
-
-        if triplets:
-            InferredSolution.objects.filter(rule_id=rule_id).filter(q).delete()
-            for triplet in triplets:
-                core.run_rules_matching(
-                    triplet,
-                    INFERENCE_RULES,
-                    self._lookup,
-                    self._remove_by_rule,
-                )
+        InferredSolution.objects.filter(rule_id=rule_id).filter(q).delete()
 
     def _lookup(self, predicate: core.Predicate) -> t.Iterable[core.Triplet]:
         "This is used by the core engine to lookup predicates in the database"
