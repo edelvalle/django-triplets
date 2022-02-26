@@ -5,7 +5,7 @@ from . import common, common_django
 
 class TestInference(common_django.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
-        with self.assertNumQueriesBetween(55, 67):
+        with self.assertNumQueries(37):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
@@ -27,14 +27,14 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_transition_from_a_set_of_rules_to_others(self):
-        with self.assertNumQueriesBetween(55, 67):
+        with self.assertNumQueries(37):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
             solutions = self.solve([(Var("a"), "descendant_of", Var("b"))])
             self.assertListEqual(solutions, [])
 
-        with self.assertNumQueriesBetween(95, 98):
+        with self.assertNumQueries(61):
             models.INFERENCE_RULES = common.descendants_rules
             api.refresh_inference()
 
@@ -79,10 +79,10 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_deleting_a_primary_triplet_deletes_its_deductions(self):
-        with self.assertNumQueries(90):
+        with self.assertNumQueries(46):
             self.populate_db(common.descendants_rules)
 
-        with self.assertNumQueries(22):
+        with self.assertNumQueries(21):
             api.remove(("father", "child_of", "grandfather"))
 
         with self.assertNumQueries(1):
@@ -112,7 +112,7 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_cant_delete_deduced_triplets(self):
-        with self.assertNumQueries(90):
+        with self.assertNumQueries(46):
             self.populate_db(common.descendants_rules)
 
         with self.assertNumQueries(1):

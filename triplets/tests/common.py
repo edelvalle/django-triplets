@@ -1,3 +1,4 @@
+import typing as t
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -108,12 +109,14 @@ class Database:
 
     def _add_by_rule(
         self,
-        triplet: core.Triplet,
         rule_id: str,
-        derived_from: frozenset[core.Triplet],
+        triplets_and_bases: t.Iterable[
+            tuple[core.Triplet, frozenset[core.Triplet]]
+        ],
     ):
-        self._add(triplet, is_infferred=True)
-        self.dependencies_of[triplet].add((rule_id, derived_from))
+        for triplet, derived_from in triplets_and_bases:
+            self._add(triplet, is_infferred=True)
+            self.dependencies_of[triplet].add((rule_id, derived_from))
 
     def refresh_inference(self):
         """Removes deductions made by all rules and runs all the inference rules
@@ -146,14 +149,16 @@ class Database:
 
     def _remove_by_rule(
         self,
-        triplet: core.Triplet,
         rule_id: str,
-        derived_from: frozenset[core.Triplet],
+        triplets_and_bases: t.Iterable[
+            tuple[core.Triplet, frozenset[core.Triplet]]
+        ],
     ):
-        self.dependencies_of[triplet].remove((rule_id, derived_from))
-        core.run_rules_matching(
-            triplet, self.rules, self.lookup, self._remove_by_rule
-        )
+        for triplet, derived_from in triplets_and_bases:
+            self.dependencies_of[triplet].remove((rule_id, derived_from))
+            core.run_rules_matching(
+                triplet, self.rules, self.lookup, self._remove_by_rule
+            )
 
     def _garbage_collect(self):
         to_delete = [

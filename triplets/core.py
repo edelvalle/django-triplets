@@ -304,7 +304,11 @@ def rule(
     )
 
 
-AddOrRemoveFunction = t.Callable[[Triplet, str, frozenset[Triplet]], t.Any]
+# AddOrRemoveFunction = t.Callable[[Triplet, str, frozenset[Triplet]], t.Any]
+AddOrRemoveFunction = t.Callable[
+    [str, t.Iterable[tuple[Triplet, frozenset[Triplet]]]],
+    t.Any,
+]
 
 
 def run_rules_matching(
@@ -332,6 +336,5 @@ def _run_rules(
     lookup: LookUpFunction,
     add: AddOrRemoveFunction,
 ):
-    for rule, origina_rule_id in rules_and_ids:
-        for triplet, derived_from in rule.run(lookup):
-            add(triplet, origina_rule_id, derived_from)
+    for rule, original_rule_id in rules_and_ids:
+        add(original_rule_id, rule.run(lookup))
