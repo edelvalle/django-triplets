@@ -1,8 +1,9 @@
 import typing as t
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from django.conf import settings
 from django.db import models
+from uuid6 import uuid7
 
 from . import core
 
@@ -192,7 +193,7 @@ class InferredSolution(models.Model):
     of this model
     """
 
-    id: UUID = models.UUIDField(primary_key=True, default=uuid4)
+    id: UUID = models.UUIDField(primary_key=True, default=uuid7)
 
     inferred_triplet = models.ForeignKey(
         StoredTriplet,
