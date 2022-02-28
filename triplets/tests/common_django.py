@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from .. import api, models
-from ..core import ListOfPredicateTuples, Rule
+from ..core import PredicateTuples, Rule
 from . import common
 
 
@@ -13,8 +13,8 @@ class TestUsingDjango(TestCase):
         models.INFERENCE_RULES = rules
         api.bulk_add(common.triplets)
 
-    def solve(self, predicates: ListOfPredicateTuples):
-        return api.solve(predicates)
+    def solve(self, predicate: PredicateTuples):
+        return api.solve(predicate)
 
-    def explain_solutions(self, predicates: ListOfPredicateTuples):
-        return api.explain_solutions(predicates)
+    def explain_solutions(self, predicate: PredicateTuples):
+        return api.explain_solutions(predicate)

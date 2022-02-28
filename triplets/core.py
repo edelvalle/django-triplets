@@ -4,7 +4,7 @@ from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
 
-Triplet = tuple[str, str, str]
+Fact = tuple[str, str, str]
 
 
 Context = dict[str, t.Any]
@@ -18,7 +18,7 @@ def storage_hash(text):
 @dataclass(frozen=True, slots=True)
 class Solution:
     context: Context
-    derived_from: frozenset[Triplet]
+    derived_from: frozenset[Fact]
 
     def merge(
         self,
@@ -92,7 +92,7 @@ def substitute_using(
 
 
 @dataclass(frozen=True)
-class Predicate(t.Iterable):
+class Clause(t.Iterable):
     subject: Expression
     verb: str
     obj: Expression
@@ -151,64 +151,64 @@ class Predicate(t.Iterable):
         else:
             return None
 
-    def matches(self, triplet: Triplet) -> t.Optional[Solution]:
+    def matches(self, fact: Fact) -> t.Optional[Solution]:
         context: dict[str, str] = {}
-        for expression, value in zip(self, triplet):
+        for expression, value in zip(self, fact):
             if (match := expression_matches(expression, value)) is None:
                 return None
             else:
                 context |= match
-        return Solution(context, frozenset([triplet]))
+        return Solution(context, frozenset([fact]))
 
 
-ListOfPredicateTuples = list[tuple[Expression, str, Expression]]
+PredicateTuples = list[tuple[Expression, str, Expression]]
 
 
 @dataclass(frozen=True, slots=True)
-class Predicates(t.Iterable):
-    items: list[Predicate]
+class Predicate(t.Iterable):
+    clauses: list[Clause]
 
     @classmethod
     def from_tuples(
-        cls: t.Type["Predicates"], predicates: ListOfPredicateTuples
-    ) -> "Predicates":
-        return cls([Predicate(*predicate) for predicate in predicates])
+        cls: t.Type["Predicate"], predicate: PredicateTuples
+    ) -> "Predicate":
+        return cls([Clause(*clause) for clause in predicate])
 
-    def optimized_by(self, contexts: list[Context]) -> list[Predicate]:
+    def optimized_by(self, contexts: list[Context]) -> list[Clause]:
         return list(sorted(self.substitute(contexts)))
 
-    def substitute(self, contexts: list[Context]) -> t.Iterable[Predicate]:
-        return (predicate.substitute_using(contexts) for predicate in self)
+    def substitute(self, contexts: list[Context]) -> t.Iterable[Clause]:
+        return (clause.substitute_using(contexts) for clause in self)
 
-    def matches(self, triplet: Triplet) -> t.Iterable[Solution]:
+    def matches(self, fact: Fact) -> t.Iterable[Solution]:
         return (
             solution
-            for predicate in self
-            if (solution := predicate.matches(triplet)) is not None
+            for clause in self
+            if (solution := clause.matches(fact)) is not None
         )
 
     @property
     def variable_names(self) -> set[str]:
-        return set(chain(*[predicate.variable_names for predicate in self]))
+        return set(chain(*[clause.variable_names for clause in self]))
 
-    def __iter__(self) -> t.Iterator[Predicate]:
-        return iter(self.items)
+    def __iter__(self) -> t.Iterator[Clause]:
+        return iter(self.clauses)
 
     def __bool__(self) -> bool:
-        return bool(self.items)
+        return bool(self.clauses)
 
-    def __add__(self, other) -> "Predicates":
+    def __add__(self, other) -> "Predicate":
         if isinstance(other, list):
             other = self.from_tuples(other)
-        return replace(self, items=self.items + other.items)
+        return replace(self, clauses=self.clauses + other.clauses)
 
 
-LookUpFunction = t.Callable[[Predicate], t.Iterable[Triplet]]
+LookUpFunction = t.Callable[[Clause], t.Iterable[Fact]]
 
 
 @dataclass(slots=True)
 class Query:
-    predicates: Predicates
+    predicate: Predicate
     solutions: list[Solution] = field(
         default_factory=lambda: [Solution({}, frozenset())]
     )
@@ -216,24 +216,24 @@ class Query:
     @classmethod
     def from_tuples(
         cls: t.Type["Query"],
-        predicates: ListOfPredicateTuples,
+        predicate: PredicateTuples,
     ) -> "Query":
-        return cls(Predicates.from_tuples(predicates))
+        return cls(Predicate.from_tuples(predicate))
 
     @property
-    def optimized_predicates(self) -> list[Predicate]:
-        return self.predicates.optimized_by([s.context for s in self.solutions])
+    def optimized_predicate(self) -> list[Clause]:
+        return self.predicate.optimized_by([s.context for s in self.solutions])
 
     def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
-        if self.predicates and self.solutions:
-            predicate, *predicates = self.optimized_predicates
+        if self.predicate and self.solutions:
+            clause, *predicate = self.optimized_predicate
             predicate_solutions = [
                 match
-                for triplet in lookup(predicate)
-                if (match := predicate.matches(triplet)) is not None
+                for fact in lookup(clause)
+                if (match := clause.matches(fact)) is not None
             ]
             next_query = Query(
-                Predicates(predicates),
+                Predicate(predicate),
                 solutions=list(
                     chain(
                         *[
@@ -250,12 +250,12 @@ class Query:
 
 @dataclass
 class Rule:
-    predicates: Predicates
-    conclusions: Predicates
+    predicate: Predicate
+    conclusions: Predicate
 
     @cached_property
     def id(self) -> str:
-        """This is an 32 chars long string Unique ID to this rule predicates and
+        """This is an 32 chars long string Unique ID to this rule predicate and
         conclusions, so it can be stored in a database and help to identify
         triplets generated by this rule.
         """
@@ -264,54 +264,54 @@ class Rule:
     def __post_init__(self):
         # validate
         missing_variables = (
-            self.conclusions.variable_names - self.predicates.variable_names
+            self.conclusions.variable_names - self.predicate.variable_names
         )
         if missing_variables:
             raise TypeError(
-                f"{self} requires {missing_variables} in its predicates"
+                f"{self} requires {missing_variables} in the predicate"
             )
 
-    def matches(self, triplet: Triplet) -> t.Iterable["Rule"]:
-        """If the `triplet` matches this rule this function returns a rule
+    def matches(self, fact: Fact) -> t.Iterable["Rule"]:
+        """If the `fact` matches this rule this function returns a rule
         that you can run `Rule.run` on to return the derived triplets
         """
-        for match in self.predicates.matches(triplet):
-            predicates = self.predicates.substitute([match.context])
+        for match in self.predicate.matches(fact):
+            predicate = self.predicate.substitute([match.context])
             conclusions = self.conclusions.substitute([match.context])
             yield replace(
                 self,
-                predicates=Predicates(list(predicates)),
-                conclusions=Predicates(list(conclusions)),
+                predicate=Predicate(list(predicate)),
+                conclusions=Predicate(list(conclusions)),
             )
 
     def run(
         self,
         lookup: LookUpFunction,
-    ) -> t.Iterable[tuple[tuple[str, str, str], frozenset[Triplet]]]:
-        for solution in Query(self.predicates).solve(lookup):
+    ) -> t.Iterable[tuple[tuple[str, str, str], frozenset[Fact]]]:
+        for solution in Query(self.predicate).solve(lookup):
             for predicate in self.conclusions.substitute([solution.context]):
-                if triplet := predicate.as_triplet:
-                    yield (triplet, solution.derived_from)
+                if fact := predicate.as_triplet:
+                    yield (fact, solution.derived_from)
 
 
 def rule(
-    predicates: ListOfPredicateTuples,
+    predicate: PredicateTuples,
     *,
-    implies: ListOfPredicateTuples,
+    implies: PredicateTuples,
 ) -> Rule:
     return Rule(
-        Predicates.from_tuples(predicates), Predicates.from_tuples(implies)
+        Predicate.from_tuples(predicate), Predicate.from_tuples(implies)
     )
 
 
 AddOrRemoveFunction = t.Callable[
-    [str, t.Sequence[tuple[Triplet, frozenset[Triplet]]]],
+    [str, t.Sequence[tuple[Fact, frozenset[Fact]]]],
     t.Any,
 ]
 
 
 def run_rules_matching(
-    triplet: Triplet,
+    fact: Fact,
     rules: t.Sequence[Rule],
     lookup: LookUpFunction,
     add: AddOrRemoveFunction,
@@ -319,7 +319,7 @@ def run_rules_matching(
     matching_rules = (
         (matching_rule, rule.id)
         for rule in rules
-        for matching_rule in rule.matches(triplet)
+        for matching_rule in rule.matches(fact)
     )
     _run_rules(rules, matching_rules, lookup, add)
 
@@ -341,5 +341,5 @@ def _run_rules(
     for rule, original_rule_id in rules_and_ids:
         if triplets_and_bases := list(rule.run(lookup)):
             add(original_rule_id, triplets_and_bases)
-            for triplet, _ in triplets_and_bases:
-                run_rules_matching(triplet, original_rules, lookup, add)
+            for fact, _ in triplets_and_bases:
+                run_rules_matching(fact, original_rules, lookup, add)
