@@ -13,10 +13,10 @@ from .common import (
 
 class TestRules(TestCase):
     def test_have_and_id_that_is_a_hash_of_itself(self):
-        self.assertEqual(siblings_rule.id, "38944175d003f17151ac53f0bd41ed80")
+        self.assertEqual(siblings_rule.id, "9056cdd077155ee4875727c9e834757f")
         self.assertEqual(
             symmetric_sibling_rule.id,
-            "75ccb96beecee77d7e61b2b99acea9b7",
+            "cd5c3bfc04018be8d346e05667a79a6f",
         )
 
     def test_fail_if_conclusion_variables_are_missing_in_predicates(self):
@@ -46,8 +46,8 @@ class TestRules(TestCase):
 class TestInference(TestCase):
     def setUp(self) -> None:
         self.db = Database()
-        for triplet in triplets:
-            self.db.add(triplet)
+        for fact in triplets:
+            self.db.add(fact)
 
     def test_siblings_rule_in_action_when_using_a_db(self):
         self.db.rules = [siblings_rule]

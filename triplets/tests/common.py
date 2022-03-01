@@ -62,19 +62,19 @@ descendants_rules = [
 @dataclass
 class Database:
 
-    # the existence of the triplet means that it exists
+    # the existence of the fact means that it exists
     # the value tells if it is infferred
-    triplets: dict[core.Triplet, bool] = field(default_factory=dict)
+    triplets: dict[core.Fact, bool] = field(default_factory=dict)
 
-    # this represents the dependencies of an inferred triplet
-    # when the set is empty it means that that triplet should be deleted
+    # this represents the dependencies of an inferred fact
+    # when the set is empty it means that that fact should be deleted
     dependencies_of: defaultdict[
-        core.Triplet, set[tuple[str, frozenset[core.Triplet]]]
+        core.Fact, set[tuple[str, frozenset[core.Fact]]]
     ] = field(default_factory=lambda: defaultdict(set))
 
     rules: list[core.Rule] = field(default_factory=list)
 
-    def lookup(self, predicate: core.Predicate):
+    def lookup(self, predicate: core.Clause):
         terms = list(predicate)
         for fact in self.triplets:
             matches = all(
@@ -90,18 +90,18 @@ class Database:
                 yield fact
 
     def solve(
-        self, predicates: core.ListOfPredicateTuples
+        self, predicate: core.PredicateTuples
     ) -> list[core.Solution]:
-        return core.Query.from_tuples(predicates).solve(self.lookup)
+        return core.Query.from_tuples(predicate).solve(self.lookup)
 
-    def add(self, triplet: core.Triplet):
-        self._add(triplet, is_infferred=False)
+    def add(self, fact: core.Fact):
+        self._add(fact, is_infferred=False)
 
-    def _add(self, triplet: core.Triplet, *, is_infferred: bool) -> None:
-        if triplet not in self.triplets:
-            self.triplets[triplet] = is_infferred
+    def _add(self, fact: core.Fact, *, is_infferred: bool) -> None:
+        if fact not in self.triplets:
+            self.triplets[fact] = is_infferred
             core.run_rules_matching(
-                triplet,
+                fact,
                 self.rules,
                 self.lookup,
                 self._add_by_rule,
@@ -110,13 +110,11 @@ class Database:
     def _add_by_rule(
         self,
         rule_id: str,
-        triplets_and_bases: t.Iterable[
-            tuple[core.Triplet, frozenset[core.Triplet]]
-        ],
+        triplets_and_bases: t.Iterable[tuple[core.Fact, frozenset[core.Fact]]],
     ):
-        for triplet, derived_from in triplets_and_bases:
-            self._add(triplet, is_infferred=True)
-            self.dependencies_of[triplet].add((rule_id, derived_from))
+        for fact, derived_from in triplets_and_bases:
+            self._add(fact, is_infferred=True)
+            self.dependencies_of[fact].add((rule_id, derived_from))
 
     def refresh_inference(self):
         """Removes deductions made by all rules and runs all the inference rules
@@ -127,42 +125,38 @@ class Database:
 
     def _remove_deductions_made_by_old_rules(self):
         current_rule_ids = frozenset(r.id for r in self.rules)
-        for triplet, is_infferred in self.triplets.items():
+        for fact, is_infferred in self.triplets.items():
             if is_infferred:
-                self.dependencies_of[triplet] = [
+                self.dependencies_of[fact] = [
                     (rule_id, dependent_from)
-                    for (rule_id, dependent_from) in self.dependencies_of[
-                        triplet
-                    ]
+                    for (rule_id, dependent_from) in self.dependencies_of[fact]
                     if rule_id in current_rule_ids
                 ]
         self._garbage_collect()
 
-    def remove(self, triplet: core.Triplet):
-        if self.triplets[triplet]:
-            raise ValueError("You can't remove a inferred triplet")
+    def remove(self, fact: core.Fact):
+        if self.triplets[fact]:
+            raise ValueError("You can't remove a inferred fact")
         core.run_rules_matching(
-            triplet, self.rules, self.lookup, self._remove_by_rule
+            fact, self.rules, self.lookup, self._remove_by_rule
         )
-        del self.triplets[triplet]
+        del self.triplets[fact]
         self._garbage_collect()
 
     def _remove_by_rule(
         self,
         rule_id: str,
-        triplets_and_bases: t.Iterable[
-            tuple[core.Triplet, frozenset[core.Triplet]]
-        ],
+        triplets_and_bases: t.Iterable[tuple[core.Fact, frozenset[core.Fact]]],
     ):
-        for triplet, derived_from in triplets_and_bases:
-            self.dependencies_of[triplet].remove((rule_id, derived_from))
+        for fact, derived_from in triplets_and_bases:
+            self.dependencies_of[fact].remove((rule_id, derived_from))
 
     def _garbage_collect(self):
         to_delete = [
-            triplet
-            for triplet, is_infferred in self.triplets.items()
-            if is_infferred and not self.dependencies_of[triplet]
+            fact
+            for fact, is_infferred in self.triplets.items()
+            if is_infferred and not self.dependencies_of[fact]
         ]
-        for triplet in to_delete:
-            del self.triplets[triplet]
-            del self.dependencies_of[triplet]
+        for fact in to_delete:
+            del self.triplets[fact]
+            del self.dependencies_of[fact]

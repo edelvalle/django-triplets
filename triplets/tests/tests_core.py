@@ -1,10 +1,10 @@
 from unittest import TestCase
 
 from ..core import (
+    Clause,
     In,
-    ListOfPredicateTuples,
     Predicate,
-    Predicates,
+    PredicateTuples,
     Query,
     Solution,
     Var,
@@ -68,14 +68,14 @@ class TestExpressions(TestCase):
 
 class TestPredicate(TestCase):
     def test_can_substitute_using_a_context_to_a_literal(self):
-        predicate = Predicate(Var("person"), "son_of", Var("parent"))
+        predicate = Clause(Var("person"), "son_of", Var("parent"))
         self.assertEqual(
             predicate.substitute_using([{"parent": "PARENT"}]),
-            Predicate(Var("person"), "son_of", "PARENT"),
+            Clause(Var("person"), "son_of", "PARENT"),
         )
         self.assertEqual(
             predicate.substitute_using([{"person": "PERSON"}]),
-            Predicate("PERSON", "son_of", Var("parent")),
+            Clause("PERSON", "son_of", Var("parent")),
         )
         self.assertEqual(
             predicate.substitute_using([{"unknown": "VALUE"}]),
@@ -83,16 +83,16 @@ class TestPredicate(TestCase):
         )
 
     def test_can_substitute_contexts_to_in_expression(self):
-        predicate = Predicate(Var("person"), "son_of", Var("parent"))
+        predicate = Clause(Var("person"), "son_of", Var("parent"))
         self.assertEqual(
             predicate.substitute_using([{"parent": "A"}, {"parent": "B"}]),
-            Predicate(Var("person"), "son_of", In("parent", {"A", "B"})),
+            Clause(Var("person"), "son_of", In("parent", {"A", "B"})),
         )
         self.assertEqual(
             predicate.substitute_using(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
-            Predicate("P", "son_of", In("parent", {"A", "B"})),
+            Clause("P", "son_of", In("parent", {"A", "B"})),
         )
         self.assertEqual(
             predicate.substitute_using([{"unknown": "VALUE"}]),
@@ -100,53 +100,53 @@ class TestPredicate(TestCase):
         )
 
     def test_sorting_protocol_prioritize_the_more_literal_one(self):
-        predicates = [
-            Predicate(In("a", {}), "b", In("c", {})),
-            Predicate(In("a", {}), "b", Var("c")),
-            Predicate(Var("a"), "b", In("c", {})),
-            Predicate("a", "b", In("c", {})),
-            Predicate(In("a", {}), "b", "c"),
-            Predicate(Var("a"), "b", Var("c")),
-            Predicate("a", "b", Var("c")),
-            Predicate(Var("a"), "b", "c"),
-            Predicate("a", "b", "c"),
+        predicate = [
+            Clause(In("a", {}), "b", In("c", {})),
+            Clause(In("a", {}), "b", Var("c")),
+            Clause(Var("a"), "b", In("c", {})),
+            Clause("a", "b", In("c", {})),
+            Clause(In("a", {}), "b", "c"),
+            Clause(Var("a"), "b", Var("c")),
+            Clause("a", "b", Var("c")),
+            Clause(Var("a"), "b", "c"),
+            Clause("a", "b", "c"),
         ]
 
-        predicates.sort()
+        predicate.sort()
         self.assertListEqual(
-            predicates,
+            predicate,
             [
-                Predicate("a", "b", "c"),
-                Predicate("a", "b", In("c", {})),
-                Predicate(In("a", {}), "b", "c"),
-                Predicate(In("a", {}), "b", In("c", {})),
-                Predicate("a", "b", Var("c")),
-                Predicate(Var("a"), "b", "c"),
-                Predicate(In("a", {}), "b", Var("c")),
-                Predicate(Var("a"), "b", In("c", {})),
-                Predicate(Var("a"), "b", Var("c")),
+                Clause("a", "b", "c"),
+                Clause("a", "b", In("c", {})),
+                Clause(In("a", {}), "b", "c"),
+                Clause(In("a", {}), "b", In("c", {})),
+                Clause("a", "b", Var("c")),
+                Clause(Var("a"), "b", "c"),
+                Clause(In("a", {}), "b", Var("c")),
+                Clause(Var("a"), "b", In("c", {})),
+                Clause(Var("a"), "b", Var("c")),
             ],
         )
 
     def test_variable_names_returns_the_name_of_the_variables(self):
         self.assertListEqual(
-            Predicate(Var("person"), "son_of", Var("parent")).variable_names,
+            Clause(Var("person"), "son_of", Var("parent")).variable_names,
             ["person", "parent"],
         )
         self.assertListEqual(
-            Predicate("subject", "verb", "obj").variable_names,
+            Clause("subject", "verb", "obj").variable_names,
             [],
         )
         self.assertListEqual(
-            Predicate(Var("subject"), "verb", "obj").variable_names,
+            Clause(Var("subject"), "verb", "obj").variable_names,
             ["subject"],
         )
         self.assertListEqual(
-            Predicate("subject", "verb", Var("obj")).variable_names,
+            Clause("subject", "verb", Var("obj")).variable_names,
             ["obj"],
         )
         self.assertListEqual(
-            Predicate(In("subject", {}), "verb", Var("obj")).variable_names,
+            Clause(In("subject", {}), "verb", Var("obj")).variable_names,
             ["subject", "obj"],
         )
 
@@ -154,39 +154,39 @@ class TestPredicate(TestCase):
 class TestQuery(TestCase):
     def setUp(self):
         self.db = common.Database()
-        for triplet in common.triplets:
-            self.db.add(triplet)
+        for fact in common.triplets:
+            self.db.add(fact)
 
-    def solve(self, predicates: ListOfPredicateTuples) -> list[Solution]:
-        return list(self.db.solve(predicates))
+    def solve(self, predicate: PredicateTuples) -> list[Solution]:
+        return list(self.db.solve(predicate))
 
     def test_optimization_makes_less_abstract_query_be_first_without_solutions(
         self,
     ):
         p1, p2, p3 = [
-            Predicate(Var("sibling"), "child_of", Var("parent")),
-            Predicate("brother", "child_of", Var("parent")),
-            Predicate(
+            Clause(Var("sibling"), "child_of", Var("parent")),
+            Clause("brother", "child_of", Var("parent")),
+            Clause(
                 In("sibling", {"brother", "Pepe"}), "child_of", Var("parent")
             ),
         ]
-        query = Query(Predicates([p1, p2, p3]))
-        self.assertListEqual(query.optimized_predicates, [p2, p3, p1])
+        query = Query(Predicate([p1, p2, p3]))
+        self.assertListEqual(query.optimized_predicate, [p2, p3, p1])
 
     def test_optimization_makes_less_abstract_query_be_first_with_solutions(
         self,
     ):
         p1, p2 = [
-            Predicate(Var("grandchild"), "child_of", Var("parent")),
-            Predicate(Var("parent"), "child_of", Var("grandparent")),
+            Clause(Var("grandchild"), "child_of", Var("parent")),
+            Clause(Var("parent"), "child_of", Var("grandparent")),
         ]
         query = Query(
-            Predicates([p1, p2]),
+            Predicate([p1, p2]),
             solutions=[Solution({"grandparent": "X"}, frozenset())],
         )
         self.assertListEqual(
-            query.optimized_predicates,
-            [Predicate(Var("parent"), "child_of", "X"), p1],
+            query.optimized_predicate,
+            [Clause(Var("parent"), "child_of", "X"), p1],
         )
 
     def test_solving_single_query_with_two_variables(self):

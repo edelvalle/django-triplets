@@ -26,9 +26,9 @@ The configuration options are:
 
 ```python
 # use the helper `triplets.rule` to create rules
-TRIPLETS_INFERENCE_RULES: list[triplet.Rule] = []
+TRIPLETS_INFERENCE_RULES: list[fact.Rule] = []
 
-# max lengths of the fields of a triplet
+# max lengths of the fields of a fact
 TRIPLETS_MAX_LENGTHS: tuple(int, int, int) = (32, 32, 32)
 ```
 
@@ -37,7 +37,7 @@ TRIPLETS_MAX_LENGTHS: tuple(int, int, int) = (32, 32, 32)
 Do you remember Prolog? or Datalog? Well, this is kind of that.
 
 Given a Knowledge Base where each Fact is represented as a Triplate in the form
-`Triplet(subject, verb, object)`, you can represent things like:
+`Fact(subject, verb, object)`, you can represent things like:
 
 ```python
 triplets = [
@@ -174,7 +174,7 @@ TRIPLETS_INFERENCE_RULES = [
 After changing the inference rules, you need to run at least one of these:
 - Run the db migrations of your project with: `python manage.py migrate`
 - Run refresh migrations: `python manage.py refresh_inference`
-- Call the `triplet.api.refresh_inference()` function
+- Call the `fact.api.refresh_inference()` function
 
 Then these rules will generate new triplets, so now you can ask for all the
 places that are *part_of* *europe*:
@@ -255,11 +255,10 @@ That's it!
   the logic that can be reused for any database as backend system.
 - Answers to queries are not in any particular order, they are given as found in
   the database.
-- The verb in a query predicate is always a string, it can't be a variable.
-- Adding or Removing triplets is heavy when you have inference rules in
-  place.
+- The verb in a Predicate is always a string, it can't be a variable.
+- Adding or Removing Facts is heavy when you have inference rules in place.
 - In case you want to add many triplets you can reduce the amount of work the
-  engine has to do by using `triplets.api.bulk_add(t.Sequence[core.Triplet])`.
+  engine has to do by using `triplets.api.bulk_add(t.Sequence[core.Fact])`.
 - This implementation is fast at reading doing just N queries to the database,
   being N the amount of predicates you pass to `triplets.api.solve()` or
   `triplets.api.explain_solutions()`.

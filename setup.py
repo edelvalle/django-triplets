@@ -6,7 +6,7 @@ HERE = Path(__file__).absolute().parent
 README = open(HERE / "README.md", encoding="utf8").read()
 
 setup(
-    name="django-triplet",
+    name="django-fact",
     version="0.0.1b0",
     url="https://github.com/edelvalle/django-triplets",
     author="Eddy Ernesto del Valle Pino",
@@ -19,7 +19,7 @@ setup(
     include_package_data=True,
     zip_safe=True,
     python_requires=">=3.9",
-    install_requires=["django>=3.2"],
+    install_requires=["django>=3.2", "uuid6"],
     extras_require={
         "dev": [
             "black",
