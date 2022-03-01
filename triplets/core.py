@@ -108,12 +108,12 @@ class Clause(t.Iterable):
         if not contexts:
             return self
 
-        predicate = self
+        clause = self
         for name, value in [("subject", self.subject), ("obj", self.obj)]:
             if isinstance(value, (Var, In)):
                 new_value = substitute_using(value, contexts)
-                predicate = replace(predicate, **{name: new_value})
-        return predicate
+                clause = replace(clause, **{name: new_value})
+        return clause
 
     def __lt__(self, other):
         """This is here for the sorting protocol and query optimization"""
@@ -121,7 +121,7 @@ class Clause(t.Iterable):
 
     @cached_property
     def sorting_key(self):
-        """The more defined (literal values) this predicate has, the lower
+        """The more defined (literal values) this clause has, the lower
         the sorting number will be. So it gets priority when performing queries.
         """
         weight = 0
