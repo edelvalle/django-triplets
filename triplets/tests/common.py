@@ -74,8 +74,8 @@ class Database:
 
     rules: list[core.Rule] = field(default_factory=list)
 
-    def lookup(self, predicate: core.Clause):
-        terms = list(predicate)
+    def lookup(self, clause: core.Clause):
+        terms = list(clause)
         for fact in self.triplets:
             matches = all(
                 isinstance(lookup_term, core.Var)
@@ -89,9 +89,7 @@ class Database:
             if matches:
                 yield fact
 
-    def solve(
-        self, predicate: core.PredicateTuples
-    ) -> list[core.Solution]:
+    def solve(self, predicate: core.PredicateTuples) -> list[core.Solution]:
         return core.Query.from_tuples(predicate).solve(self.lookup)
 
     def add(self, fact: core.Fact):
