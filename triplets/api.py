@@ -1,5 +1,5 @@
 from .core import Rule, Var, rule
-from .models import StoredTriplet
+from .models import StoredFact
 
 __all__ = [
     "Rule",
@@ -8,14 +8,16 @@ __all__ = [
     "add",
     "bulk_add",
     "remove",
+    "bulk_remove",
     "solve",
     "explain_solutions",
     "refresh_inference",
 ]
 
-add = StoredTriplet.objects.add
-bulk_add = StoredTriplet.objects.bulk_add
-remove = StoredTriplet.objects.remove
-solve = StoredTriplet.objects.solve
-explain_solutions = StoredTriplet.objects.explain_solutions
-refresh_inference = StoredTriplet.objects.refresh_inference
+add = StoredFact.objects.add
+bulk_add = StoredFact.objects.bulk_add
+remove = StoredFact.objects.remove
+bulk_remove = StoredFact.objects.bulk_remove
+solve = StoredFact.objects.solve
+explain_solutions = StoredFact.objects.explain_solutions
+refresh_inference = StoredFact.objects.refresh_inference

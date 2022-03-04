@@ -3,12 +3,12 @@ from django.contrib import admin
 from . import models
 
 
-@admin.register(models.StoredTriplet)
-class StoredTripletAdmin(admin.ModelAdmin):
+@admin.register(models.StoredFact)
+class StoredFactAdmin(admin.ModelAdmin):
     search_fields = ["subject", "verb", "obj"]
     list_display = search_fields + ["is_inferred"]
 
-    # Don't use this interface to mess around with triplets, use the API
+    # Don't use this interface to mess around with facts, use the API
 
     def has_add_permission(self, request):
         return False

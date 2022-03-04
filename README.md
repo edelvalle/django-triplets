@@ -27,9 +27,6 @@ The configuration options are:
 ```python
 # use the helper `triplets.rule` to create rules
 TRIPLETS_INFERENCE_RULES: list[fact.Rule] = []
-
-# max lengths of the fields of a fact
-TRIPLETS_MAX_LENGTHS: tuple(int, int, int) = (32, 32, 32)
 ```
 
 ## Usage
@@ -40,7 +37,7 @@ Given a Knowledge Base where each Fact is represented as a Triplate in the form
 `Fact(subject, verb, object)`, you can represent things like:
 
 ```python
-triplets = [
+facts = [
     # germany facts
     ("mitte", "located_in", "berlin"),
     ("spandau", "located_in", "berlin"),
@@ -61,7 +58,7 @@ triplets = [
 ]
 ```
 
-This set of `triplets` represents a directed graph where the verbs are the edges
+This set of `facts` represents a directed graph where the verbs are the edges
 and subjects/objects the nodes?.
 
 You can store this in the database by doing:
@@ -69,7 +66,7 @@ You can store this in the database by doing:
 ```python
 from triplets import api
 
-api.bulk_add(triplets)
+api.bulk_add(facts)
 ```
 
 After that you can make queries like:
@@ -105,7 +102,7 @@ assert answers == [
 
 If you want to understand where all that is coming from, how did the solver
 arrived to that conclusion use `triplets.api.explain_solutions()` and you will
-see each Solution from which triplets is derived from:
+see each Solution from which facts is derived from:
 
 ```python
 answers = api.explain_solutions([
@@ -151,7 +148,7 @@ but they will contain the same information.
 ## Inference rules
 
 You can also configure inference rules to help you define relations that are
-inferred from existing triplets. This is of helpful if you are trying to query
+inferred from existing facts. This is of helpful if you are trying to query
 complicated relations betwen nodes. Let's take a look.
 
 First configure your inference rules in the `settings.py` file:
@@ -172,12 +169,13 @@ TRIPLETS_INFERENCE_RULES = [
 ```
 
 After changing the inference rules, you need to run at least one of these:
+
 - Run the db migrations of your project with: `python manage.py migrate`
 - Run refresh migrations: `python manage.py refresh_inference`
 - Call the `fact.api.refresh_inference()` function
 
-Then these rules will generate new triplets, so now you can ask for all the
-places that are *part_of* *europe*:
+Then these rules will generate new facts, so now you can ask for all the places
+that are _part_of_ _europe_:
 
 ```python
 answers = api.solve([(Var("place"), "part_of", "europe")])
@@ -194,15 +192,13 @@ assert answers == [
 ]
 ```
 
-
 ### Mutations when having inference rules
 
-
-You can't delete inferred triplets, so this will fail:
+You can't delete inferred facts, so this will fail:
 
 ```python
 api.remove(("berlin", "part_of", "germany"))
->>> ValueError("You can't remove inferred triplets")
+>>> ValueError("You can't remove inferred facts")
 ```
 
 ...and this will work:
@@ -211,8 +207,8 @@ api.remove(("berlin", "part_of", "germany"))
 api.remove(("berlin", "located_in", "germany"))
 ```
 
-And it will propagate through the inferred triplets; so "berlin", "spandau" and
-"mitte" will be no longer *part_of* *germany*:
+And it will propagate through the inferred facts; so "berlin", "spandau" and
+"mitte" will be no longer _part_of_ _germany_:
 
 ```python
 answers = api.solve([(Var("place"), "part_of", "europe")])
@@ -226,7 +222,7 @@ assert answers == [
 ]
 ```
 
-You can restore the relation and it will regenerate the *part_of* relations.
+You can restore the relation and it will regenerate the _part_of_ relations.
 
 ```python
 api.add(("berlin", "located_in", "germany"))
@@ -257,7 +253,7 @@ That's it!
   the database.
 - The verb in a Predicate is always a string, it can't be a variable.
 - Adding or Removing Facts is heavy when you have inference rules in place.
-- In case you want to add many triplets you can reduce the amount of work the
+- In case you want to add many facts you can reduce the amount of work the
   engine has to do by using `triplets.api.bulk_add(t.Sequence[core.Fact])`.
 - This implementation is fast at reading doing just N queries to the database,
   being N the amount of predicates you pass to `triplets.api.solve()` or

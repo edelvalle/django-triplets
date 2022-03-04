@@ -78,7 +78,7 @@ class TestInference(common.TestUsingDjango):
                 ],
             )
 
-    def test_deleting_a_primary_triplet_deletes_its_deductions(self):
+    def test_deleting_a_primary_fact_deletes_its_deductions(self):
         with self.assertNumQueries(46):
             self.populate_db(common.descendants_rules)
 
@@ -111,7 +111,7 @@ class TestInference(common.TestUsingDjango):
                 ],
             )
 
-    def test_cant_delete_deduced_triplets(self):
+    def test_cant_delete_deduced_fact(self):
         with self.assertNumQueries(46):
             self.populate_db(common.descendants_rules)
 

@@ -10,9 +10,6 @@ from . import core
 INFERENCE_RULES: list[core.Rule] = getattr(
     settings, "TRIPLETS_INFERENCE_RULES", []
 )
-ML_SUBJECT, ML_VERB, ML_OBJ = getattr(
-    settings, "TRIPLETS_MAX_LENGTHS", (32, 32, 32)
-)
 
 
 class Fact:
@@ -30,7 +27,7 @@ class Fact:
         return {"subject": subject, "verb": verb, "obj": obj}
 
 
-class StoredTripletQS(models.QuerySet):
+class StoredFactQS(models.QuerySet):
     def add(self, fact: core.Fact) -> None:
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
@@ -57,7 +54,7 @@ class StoredTripletQS(models.QuerySet):
         while key_fact_rule_id_bases:
             self.bulk_create(
                 (
-                    StoredTriplet(
+                    StoredFact(
                         id=key,
                         is_inferred=rule_id is not None,
                         **Fact.as_dict(fact),
@@ -70,7 +67,7 @@ class StoredTripletQS(models.QuerySet):
             InferredSolution.objects.bulk_create(
                 (
                     InferredSolution(
-                        inferred_triplet_id=key,
+                        inferred_fact_id=key,
                         rule_id=rule_id,
                         solution_hash=key + Fact.storage_key_for_many(bases),
                     )
@@ -95,12 +92,12 @@ class StoredTripletQS(models.QuerySet):
 
     def bulk_remove(self, facts: t.Sequence[core.Fact]):
         facts_set = set(facts)
-        stored_triplets = self.filter(
+        stored_facts = self.filter(
             id__in=[Fact.storage_key(fact) for fact in facts_set],
             is_inferred=False,
         )
-        if stored_triplets.count() != len(facts_set):
-            raise ValueError("You can't remove inferred triplets")
+        if stored_facts.count() != len(facts_set):
+            raise ValueError("You can't remove inferred facts")
 
         q = models.Q()
         while facts_set:
@@ -111,14 +108,14 @@ class StoredTripletQS(models.QuerySet):
                 key = Fact.storage_key(fact)
                 next_facts.add(fact)
                 q |= models.Q(
-                    inferred_triplet_id=key,
+                    inferred_fact_id=key,
                     rule_id=rule_id,
                     solution_hash=key + Fact.storage_key_for_many(bases),
                 )
             facts_set = next_facts
 
         InferredSolution.objects.filter(q).delete()
-        stored_triplets.delete()
+        stored_facts.delete()
         self._garbage_collect()
 
     def solve(self, query: core.PredicateTuples) -> list[core.Context]:
@@ -129,7 +126,7 @@ class StoredTripletQS(models.QuerySet):
         self, query: core.PredicateTuples
     ) -> list[core.Solution]:
         """Solves the `query` and returns all Solutions so you can inspect from
-        which triplets those solutions are derived from
+        which facts those solutions are derived from
         """
         return core.Query.from_tuples(query).solve(self._lookup)
 
@@ -171,18 +168,16 @@ class StoredTripletQS(models.QuerySet):
         )
 
 
-class StoredTriplet(models.Model):
+class StoredFact(models.Model):
     id = models.CharField(primary_key=True, max_length=32)
 
-    subject: str = models.CharField(max_length=ML_SUBJECT)
-    verb: str = models.CharField(max_length=ML_VERB)
-    obj: str = models.CharField(max_length=ML_VERB)
-
-    # uuid7, entity, attr, value, is_inferred, died_on, kills, transaction_uuid7
+    subject: str = models.CharField(max_length=64)
+    verb: str = models.CharField(max_length=64)
+    obj: str = models.CharField(max_length=64)
 
     is_inferred = models.BooleanField(db_index=True)
 
-    objects: StoredTripletQS = StoredTripletQS.as_manager()
+    objects: StoredFactQS = StoredFactQS.as_manager()
 
     class Meta:
         unique_together = [["subject", "verb", "obj"]]
@@ -193,29 +188,29 @@ class StoredTriplet(models.Model):
         ]
 
     def __str__(self):
-        return " -> ".join(self)
+        return f"{self.subject} -({self.verb})-> {self.obj}"
 
 
 class InferredSolution(models.Model):
-    """When a Fact is inferred from a Rule and a set of triplets
-    we need to keep track of that because inferred triplets can't be manually
+    """When a Fact is inferred from a Rule and a set of facts
+    we need to keep track of that because inferred facts can't be manually
     deleted by the user.
 
     An inference rule can generate the same fact for multiple reasons
-    (different set of base triplets). Those reasons are tracked by each instance
+    (different set of base facts). Those reasons are tracked by each instance
     of this model
     """
 
     id: UUID = models.UUIDField(primary_key=True, default=uuid7)
 
-    inferred_triplet = models.ForeignKey(
-        StoredTriplet,
+    inferred_fact = models.ForeignKey(
+        StoredFact,
         on_delete=models.PROTECT,
         related_name="inferred_by",
     )
     rule_id: str = models.CharField(max_length=32, db_index=True)
 
-    # join of inferred_triplet_id and base_triplets_hash
+    # join of inferred_fact_id and base_facts_hash
     solution_hash = models.CharField(max_length=64)
 
     class Meta:
