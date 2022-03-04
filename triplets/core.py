@@ -15,7 +15,7 @@ def storage_hash(text):
     return shake_128(text.encode()).hexdigest(16)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Solution:
     context: Context
     derived_from: frozenset[Fact]
@@ -41,13 +41,13 @@ class Solution:
                 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class In:
     name: str
     values: set[str]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Var:
     name: str
 
@@ -164,7 +164,7 @@ class Clause(t.Iterable):
 PredicateTuples = list[tuple[Expression, str, Expression]]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Predicate(t.Iterable):
     clauses: list[Clause]
 
