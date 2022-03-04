@@ -3,6 +3,8 @@ from . import common
 
 
 class TestDjango(common.TestUsingDjango):
+    checkNumQueries = False
+
     def setUp(self):
         self.populate_db([])
 

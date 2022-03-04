@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from .. import api, models
-from ..core import PredicateTuples, Rule, Var, rule
+from ..core import Rule, Var, rule
 
 triplets = [
     # the broder
@@ -58,6 +58,10 @@ descendants_rules = [
 
 
 class TestUsingDjango(TestCase):
+
+    solve = api.solve
+    explain_solutions = api.explain_solutions
+
     def tearDown(self):
         models.INFERENCE_RULES = []
 
@@ -65,8 +69,23 @@ class TestUsingDjango(TestCase):
         models.INFERENCE_RULES = rules
         api.bulk_add(triplets)
 
-    def solve(self, predicate: PredicateTuples):
-        return api.solve(predicate)
+    checkNumQueries = True
 
-    def explain_solutions(self, predicate: PredicateTuples):
-        return api.explain_solutions(predicate)
+    def print_transaction_log(self):
+        print()
+        for tx in models.Transaction.objects.all():
+            print(tx)
+            for mutation in tx.mutations:
+                print(*mutation)
+
+    def assertNumQueries(self, *args, **kwargs):
+        if self.checkNumQueries:
+            return super().assertNumQueries(*args, **kwargs)
+        else:
+            from contextlib import contextmanager
+
+            @contextmanager
+            def dummy(*args, **kwargs):
+                yield None
+
+            return dummy(*args, **kwargs)

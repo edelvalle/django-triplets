@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 from .. import api, models
 from ..core import Solution, Var
 from . import common
 
 
 class TestInference(common.TestUsingDjango):
+    checkNumQueries = False
+
     def test_siblings_rule_in_action_when_using_a_db(self):
         with self.assertNumQueries(23):
             self.populate_db([common.siblings_rule])
@@ -47,40 +51,45 @@ class TestInference(common.TestUsingDjango):
                 [
                     Solution(
                         {"a": "brother", "b": "father"},
-                        frozenset({("brother", "descendant_of", "father")}),
+                        {("brother", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        frozenset({("sister", "descendant_of", "father")}),
+                        {("sister", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "father", "b": "grandfather"},
-                        frozenset({("father", "descendant_of", "grandfather")}),
+                        {("father", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "brother", "b": "grandfather"},
-                        frozenset(
-                            {("brother", "descendant_of", "grandfather")}
-                        ),
+                        {("brother", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "sister", "b": "grandfather"},
-                        frozenset({("sister", "descendant_of", "grandfather")}),
+                        {("sister", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        frozenset({("brother", "descendant_of", "mother")}),
+                        {("brother", "descendant_of", "mother")},
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        frozenset({("sister", "descendant_of", "mother")}),
+                        {("sister", "descendant_of", "mother")},
                     ),
                 ],
             )
 
-    def test_deleting_a_primary_fact_deletes_its_deductions(self):
+    def test_deleting_a_primary_fact_deletes_its_deductions_and_travel(self):
         with self.assertNumQueries(46):
             self.populate_db(common.descendants_rules)
+
+        before_removing_the_granfather_real_tx = (
+            models.Transaction.objects.last()
+        )
+        before_removing_the_granfather_real_dt = (
+            (datetime).utcnow().astimezone(timezone.utc)
+        )
 
         with self.assertNumQueries(21):
             api.remove(("father", "child_of", "grandfather"))
@@ -94,22 +103,57 @@ class TestInference(common.TestUsingDjango):
                 [
                     Solution(
                         {"a": "brother", "b": "father"},
-                        frozenset({("brother", "descendant_of", "father")}),
+                        {("brother", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        frozenset({("sister", "descendant_of", "father")}),
+                        {("sister", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        frozenset({("brother", "descendant_of", "mother")}),
+                        {("brother", "descendant_of", "mother")},
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        frozenset({("sister", "descendant_of", "mother")}),
+                        {("sister", "descendant_of", "mother")},
                     ),
                 ],
             )
+
+        # we can time travel, he he he!
+
+        with self.assertNumQueries(1):
+            solutions_from_tx = self.explain_solutions(
+                [(Var("a"), "descendant_of", "grandfather")],
+                as_of=before_removing_the_granfather_real_tx,
+            )
+
+        with self.assertNumQueries(1):
+            solutions_from_dt = self.explain_solutions(
+                [(Var("a"), "descendant_of", "grandfather")],
+                as_of=before_removing_the_granfather_real_dt,
+            )
+
+        # reading from datetime and transaction are the same
+        self.assertEqual(solutions_from_tx, solutions_from_dt)
+
+        self.assertListEqual(
+            solutions_from_tx,
+            [
+                Solution(
+                    {"a": "father"},
+                    {("father", "descendant_of", "grandfather")},
+                ),
+                Solution(
+                    {"a": "brother"},
+                    {("brother", "descendant_of", "grandfather")},
+                ),
+                Solution(
+                    {"a": "sister"},
+                    {("sister", "descendant_of", "grandfather")},
+                ),
+            ],
+        )
 
     def test_cant_delete_deduced_fact(self):
         with self.assertNumQueries(46):
