@@ -22,7 +22,7 @@ class Fact:
 
     @staticmethod
     def storage_key_for_many(facts: frozenset[core.Fact]) -> str:
-        return core.storage_hash(str(facts))
+        return core.storage_hash(str(list(sorted(facts))))
 
     @staticmethod
     def as_dict(fact: core.Fact) -> dict[str, str]:
