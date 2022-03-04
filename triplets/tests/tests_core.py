@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from ..core import Clause, In, Var, substitute_using
+from ..core import Any, Clause, In, Var, substitute_using
 
 
 class TestExpressions(TestCase):
@@ -89,8 +89,26 @@ class TestPredicate(TestCase):
             predicate,
         )
 
+    def test_can_substitute_contexts_to_any_expression(self):
+        predicate = Clause(Var("person"), "son_of", Any)
+        self.assertEqual(
+            predicate.substitute_using([{"parent": "A"}, {"parent": "B"}]),
+            Clause(Var("person"), "son_of", Any),
+        )
+        self.assertEqual(
+            predicate.substitute_using(
+                [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
+            ),
+            Clause("P", "son_of", Any),
+        )
+        self.assertEqual(
+            predicate.substitute_using([{"unknown": "VALUE"}]),
+            predicate,
+        )
+
     def test_sorting_protocol_prioritize_the_more_literal_one(self):
         predicate = [
+            Clause(Any, "b", In("c", {})),
             Clause(In("a", {}), "b", In("c", {})),
             Clause(In("a", {}), "b", Var("c")),
             Clause(Var("a"), "b", In("c", {})),
@@ -115,6 +133,7 @@ class TestPredicate(TestCase):
                 Clause(In("a", {}), "b", Var("c")),
                 Clause(Var("a"), "b", In("c", {})),
                 Clause(Var("a"), "b", Var("c")),
+                Clause(Any, "b", In("c", {})),
             ],
         )
 

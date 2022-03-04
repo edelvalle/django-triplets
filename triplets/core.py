@@ -52,7 +52,13 @@ class Var:
     name: str
 
 
-Expression = str | Var | In
+class AnyType:
+    ...
+
+
+Any = AnyType()
+
+Expression = AnyType | Var | In | str
 
 
 def expression_matches(
@@ -68,8 +74,8 @@ def expression_matches(
         return {expression.name: value} if value in expression.values else None
     elif isinstance(expression, Var):
         return {expression.name: value}
-    else:
-        return None
+    elif isinstance(expression, AnyType):
+        return {}
 
 
 def substitute_using(
@@ -130,6 +136,9 @@ class Clause(t.Iterable):
                 weight += 1
             elif isinstance(value, Var):
                 weight += 3
+            elif isinstance(value, AnyType):
+                weight += 7
+
         return weight
 
     @property
