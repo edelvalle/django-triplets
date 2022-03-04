@@ -5,7 +5,7 @@ from . import common, common_django
 
 class TestInference(common_django.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
-        with self.assertNumQueries(37):
+        with self.assertNumQueries(23):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
@@ -27,14 +27,14 @@ class TestInference(common_django.TestUsingDjango):
             )
 
     def test_transition_from_a_set_of_rules_to_others(self):
-        with self.assertNumQueries(37):
+        with self.assertNumQueries(23):
             self.populate_db([common.siblings_rule])
 
         with self.assertNumQueries(1):
             solutions = self.solve([(Var("a"), "descendant_of", Var("b"))])
             self.assertListEqual(solutions, [])
 
-        with self.assertNumQueries(61):
+        with self.assertNumQueries(46):
             models.INFERENCE_RULES = common.descendants_rules
             api.refresh_inference()
 

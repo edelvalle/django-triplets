@@ -35,32 +35,90 @@ class StoredTripletQS(models.QuerySet):
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
 
-    def bulk_add(self, triplets: t.Sequence[core.Fact]):
-        """Use this method to add many triplets to the knowledge base.
-        This method has better performance than adding the triplets one by one.
+    def bulk_add(self, facts: t.Sequence[core.Fact]):
+        """Use this method to add many facts to the knowledge base.
+        This method has better performance than adding the facts one by one.
         """
-        self.bulk_create(
-            StoredTriplet(
-                id=Fact.storage_key(fact),
-                is_inferred=False,
-                **Fact.as_dict(fact),
-            )
-            for fact in triplets
+        self._bulk_add(
+            [(Fact.storage_key(fact), fact, None, None) for fact in facts]
         )
-        for fact in triplets:
-            core.run_rules_matching(
-                fact, INFERENCE_RULES, self._lookup, self._add_by_rule
+
+    def _bulk_add(
+        self,
+        key_fact_rule_id_bases: t.Sequence[
+            tuple[
+                str,
+                core.Fact,
+                t.Optional[str],
+                t.Optional[frozenset[core.Fact]],
+            ]
+        ],
+    ):
+        while key_fact_rule_id_bases:
+            self.bulk_create(
+                (
+                    StoredTriplet(
+                        id=key,
+                        is_inferred=rule_id is not None,
+                        **Fact.as_dict(fact),
+                    )
+                    for key, fact, rule_id, _ in key_fact_rule_id_bases
+                ),
+                ignore_conflicts=True,
             )
+
+            InferredSolution.objects.bulk_create(
+                (
+                    InferredSolution(
+                        inferred_triplet_id=key,
+                        rule_id=rule_id,
+                        solution_hash=key + Fact.storage_key_for_many(bases),
+                    )
+                    for key, _, rule_id, bases in key_fact_rule_id_bases
+                    if rule_id and bases
+                ),
+                ignore_conflicts=True,
+            )
+
+            key_fact_rule_id_bases = [
+                (Fact.storage_key(fact), fact, rule_id, bases)
+                for fact, rule_id, bases in core.run_rules_matching(
+                    [fact for _, fact, _, _ in key_fact_rule_id_bases],
+                    INFERENCE_RULES,
+                    self._lookup,
+                )
+            ]
 
     def remove(self, fact: core.Fact):
         """Removes a fact form the knowledge base"""
-        stored_triplet = self.filter(id=Fact.storage_key(fact)).get()
-        if stored_triplet.is_inferred:
-            raise ValueError("You can't remove inferred triplets")
-        core.run_rules_matching(
-            fact, INFERENCE_RULES, self._lookup, self._remove_by_rule
+        self.bulk_remove([fact])
+
+    def bulk_remove(self, facts: t.Sequence[core.Fact]):
+        facts_set = set(facts)
+        stored_triplets = self.filter(
+            id__in=[Fact.storage_key(fact) for fact in facts_set],
+            is_inferred=False,
         )
-        stored_triplet.delete()
+        if stored_triplets.count() != len(facts_set):
+            raise ValueError("You can't remove inferred triplets")
+
+        q = models.Q()
+        while facts_set:
+            next_facts = set()
+            for fact, rule_id, bases in core.run_rules_matching(
+                facts_set, INFERENCE_RULES, self._lookup
+            ):
+                key = Fact.storage_key(fact)
+                next_facts.add(fact)
+                q |= models.Q(
+                    inferred_triplet_id=key,
+                    rule_id=rule_id,
+                    solution_hash=key + Fact.storage_key_for_many(bases),
+                )
+            facts_set = next_facts
+
+        InferredSolution.objects.filter(q).delete()
+        stored_triplets.delete()
         self._garbage_collect()
 
     def solve(self, query: core.PredicateTuples) -> list[core.Context]:
@@ -85,56 +143,14 @@ class StoredTripletQS(models.QuerySet):
         self._garbage_collect()
 
         # run the current rules on the whole DB
-        core.refresh_rules(INFERENCE_RULES, self._lookup, self._add_by_rule)
-
-    def _add_by_rule(
-        self,
-        rule_id: str,
-        triplets_and_bases: t.Sequence[tuple[core.Fact, frozenset[core.Fact]]],
-    ):
-        keys_triplets_bases_hash = [
-            (
-                Fact.storage_key(fact),
-                fact,
-                Fact.storage_key_for_many(bases),
-            )
-            for fact, bases in triplets_and_bases
-        ]
-        self.bulk_create(
-            (
-                StoredTriplet(
-                    id=key,
-                    is_inferred=True,
-                    **Fact.as_dict(fact),
+        self._bulk_add(
+            [
+                (Fact.storage_key(fact), fact, rule_id, bases)
+                for fact, rule_id, bases in core.refresh_rules(
+                    INFERENCE_RULES, self._lookup
                 )
-                for key, fact, _ in keys_triplets_bases_hash
-            ),
-            ignore_conflicts=True,
+            ]
         )
-        InferredSolution.objects.bulk_create(
-            (
-                InferredSolution(
-                    inferred_triplet_id=key,
-                    rule_id=rule_id,
-                    solution_hash=key + bases_hash,
-                )
-                for key, _, bases_hash in keys_triplets_bases_hash
-            ),
-            ignore_conflicts=True,
-        )
-
-    def _remove_by_rule(
-        self,
-        rule_id: str,
-        triplets_and_bases: t.Sequence[tuple[core.Fact, frozenset[core.Fact]]],
-    ):
-        InferredSolution.objects.filter(
-            rule_id=rule_id,
-            solution_hash__in=[
-                Fact.storage_key(fact) + Fact.storage_key_for_many(bases)
-                for fact, bases in triplets_and_bases
-            ],
-        ).delete()
 
     def _lookup(self, predicate: core.Clause) -> t.Iterable[core.Fact]:
         "This is used by the core engine to lookup predicates in the database"

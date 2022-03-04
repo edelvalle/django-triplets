@@ -304,42 +304,34 @@ def rule(
     )
 
 
-AddOrRemoveFunction = t.Callable[
-    [str, t.Sequence[tuple[Fact, frozenset[Fact]]]],
-    t.Any,
-]
-
-
 def run_rules_matching(
-    fact: Fact,
+    facts: t.Iterable[Fact],
     rules: t.Sequence[Rule],
     lookup: LookUpFunction,
-    add: AddOrRemoveFunction,
-):
-    matching_rules = (
+) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    matching_rules_and_original_ids = [
         (matching_rule, rule.id)
+        for fact in facts
         for rule in rules
         for matching_rule in rule.matches(fact)
-    )
-    _run_rules(rules, matching_rules, lookup, add)
+    ]
+    return _run_rules(matching_rules_and_original_ids, lookup)
 
 
 def refresh_rules(
     rules: t.Sequence[Rule],
     lookup: LookUpFunction,
-    add: AddOrRemoveFunction,
-):
-    _run_rules(rules, ((rule, rule.id) for rule in rules), lookup, add)
+) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    return _run_rules(
+        ((rule, rule.id) for rule in rules),
+        lookup,
+    )
 
 
 def _run_rules(
-    original_rules: t.Sequence[Rule],
-    rules_and_ids: t.Iterable[tuple[Rule, str]],
+    rules_and_original_ids: t.Iterable[tuple[Rule, str]],
     lookup: LookUpFunction,
-    add: AddOrRemoveFunction,
-):
-    for rule, original_rule_id in rules_and_ids:
-        if triplets_and_bases := list(rule.run(lookup)):
-            add(original_rule_id, triplets_and_bases)
-            for fact, _ in triplets_and_bases:
-                run_rules_matching(fact, original_rules, lookup, add)
+) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    for rule, original_rule_id in rules_and_original_ids:
+        for fact, bases in rule.run(lookup):
+            yield fact, original_rule_id, bases
