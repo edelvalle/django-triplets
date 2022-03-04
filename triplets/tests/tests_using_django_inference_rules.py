@@ -1,9 +1,9 @@
 from .. import api, models
 from ..core import Solution, Var
-from . import common, common_django
+from . import common
 
 
-class TestInference(common_django.TestUsingDjango):
+class TestInference(common.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
         with self.assertNumQueries(23):
             self.populate_db([common.siblings_rule])

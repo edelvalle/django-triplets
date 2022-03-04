@@ -1,8 +1,8 @@
 from ..core import Var
-from . import common_django
+from . import common
 
 
-class TestDjango(common_django.TestUsingDjango):
+class TestDjango(common.TestUsingDjango):
     def setUp(self):
         self.populate_db([])
 
