@@ -258,3 +258,30 @@ That's it!
 - This implementation is fast at reading doing just N queries to the database,
   being N the amount of predicates you pass to `triplets.api.solve()` or
   `triplets.api.explain_solutions()`.
+
+## TODO
+
+- Add cardinality
+    - An attribute has cardinality, name, data type
+    - Operations on attributes with cardinality one perform a (x, y, Any) remove operations and then the actual add operation (x, y, z)
+
+- Add data types:
+    - Entity expression that is always about strings
+    - There is like an untyped level Expressions that with the support of attribute types compile to their specific type
+    - When evaluating a Predicate the predicate can optimize the queries
+        - Make sure all variables with same name are of the same type
+
+- Add different kinds of operators to constrain a query
+    - Make sure all expressions make sense with the type
+    - Unify all variable constrains:
+        If somewhere a variable says x > 1 and somewhere x < 5, that compiles everywhere to 1 < x < 5
+        Keep in mind that some variables will be in operations to other variables like in the case:
+            (LittelBrother, age, LBAge)
+            (BigBrother, age, LBAge < LGAge) =>
+            (LittleBrother, is_little_brother_of, BigBrother)
+        In this case the variables most be of the same type, and the second query can't be performed until
+        the first one is not cleared out
+        This case is hard to optimize for bulk operations, it will require a lookup per result in the first query.
+
+    - Find non-sense things like 5 > x < 1
+        - And respond that this is not valid and the response should be 0
