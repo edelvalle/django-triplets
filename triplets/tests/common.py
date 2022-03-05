@@ -78,14 +78,14 @@ class TestUsingDjango(TestCase):
             for mutation in tx.mutations:
                 print(*mutation)
 
-    def assertNumQueries(self, *args, **kwargs):
+    def assertNumQueries(self, number: int):
         if self.checkNumQueries:
-            return super().assertNumQueries(*args, **kwargs)
+            return super().assertNumQueries(number)
         else:
             from contextlib import contextmanager
 
             @contextmanager
-            def dummy(*args, **kwargs):
+            def dummy(number: int):
                 yield None
 
-            return dummy(*args, **kwargs)
+            return dummy(number)

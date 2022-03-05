@@ -108,12 +108,12 @@ class TestPredicate(TestCase):
 
     def test_sorting_protocol_prioritize_the_more_literal_one(self):
         predicate = [
-            Clause(Any, "b", In("c", {})),
-            Clause(In("a", {}), "b", In("c", {})),
-            Clause(In("a", {}), "b", Var("c")),
-            Clause(Var("a"), "b", In("c", {})),
-            Clause("a", "b", In("c", {})),
-            Clause(In("a", {}), "b", "c"),
+            Clause(Any, "b", In("c", set())),
+            Clause(In("a", set()), "b", In("c", set())),
+            Clause(In("a", set()), "b", Var("c")),
+            Clause(Var("a"), "b", In("c", set())),
+            Clause("a", "b", In("c", set())),
+            Clause(In("a", set()), "b", "c"),
             Clause(Var("a"), "b", Var("c")),
             Clause("a", "b", Var("c")),
             Clause(Var("a"), "b", "c"),
@@ -125,15 +125,15 @@ class TestPredicate(TestCase):
             predicate,
             [
                 Clause("a", "b", "c"),
-                Clause("a", "b", In("c", {})),
-                Clause(In("a", {}), "b", "c"),
-                Clause(In("a", {}), "b", In("c", {})),
+                Clause("a", "b", In("c", set())),
+                Clause(In("a", set()), "b", "c"),
+                Clause(In("a", set()), "b", In("c", set())),
                 Clause("a", "b", Var("c")),
                 Clause(Var("a"), "b", "c"),
-                Clause(In("a", {}), "b", Var("c")),
-                Clause(Var("a"), "b", In("c", {})),
+                Clause(In("a", set()), "b", Var("c")),
+                Clause(Var("a"), "b", In("c", set())),
                 Clause(Var("a"), "b", Var("c")),
-                Clause(Any, "b", In("c", {})),
+                Clause(Any, "b", In("c", set())),
             ],
         )
 
@@ -155,6 +155,6 @@ class TestPredicate(TestCase):
             ["obj"],
         )
         self.assertListEqual(
-            Clause(In("subject", {}), "verb", Var("obj")).variable_names,
+            Clause(In("subject", set()), "verb", Var("obj")).variable_names,
             ["subject", "obj"],
         )

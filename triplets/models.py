@@ -31,7 +31,7 @@ class Fact:
         return {"subject": subject, "verb": verb, "obj": obj}
 
 
-class StoredFactQS(models.QuerySet):
+class StoredFactQS(models.QuerySet["StoredFact"]):
     def add(self, fact: core.Fact) -> None:
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
@@ -74,7 +74,7 @@ class StoredFactQS(models.QuerySet):
                 ignore_conflicts=True,
             )
 
-            fact_to_stored_fact_id = {
+            fact_to_stored_fact_id: dict[core.Fact, UUID] = {
                 stored_fact.as_fact: stored_fact.id
                 for stored_fact in stored_facts
             }
@@ -121,7 +121,7 @@ class StoredFactQS(models.QuerySet):
 
         q = models.Q()
         while facts_set:
-            next_facts = set()
+            next_facts: set[core.Fact] = set()
             for fact, rule_id, bases in core.run_rules_matching(
                 facts_set, INFERENCE_RULES, self._lookup
             ):
@@ -207,7 +207,7 @@ class StoredFactQS(models.QuerySet):
                     added__lte=when,
                 )
 
-    def _is_inferred(self, is_inferred) -> "StoredFactQS":
+    def _is_inferred(self, is_inferred: bool) -> "StoredFactQS":
         return self.filter(is_inferred=is_inferred)
 
     def _garbage_collect(self, tx_id: UUID):
@@ -221,10 +221,12 @@ class StoredFactQS(models.QuerySet):
 
 
 class Transaction(models.Model):
-    id: UUID = models.UUIDField(primary_key=True)
-    timestamp: datetime = models.DateTimeField(db_index=True)
+    id: models.UUIDField[UUID, UUID] = models.UUIDField(primary_key=True)
+    timestamp: models.DateTimeField[datetime, datetime] = models.DateTimeField(
+        db_index=True
+    )
 
-    class Meta:
+    class Meta:  # type: ignore
         ordering = ["id"]
 
     @property
@@ -245,38 +247,42 @@ class Transaction(models.Model):
         return cls.objects.create(id=identifier, timestamp=timestamp)
 
     @classmethod
-    def as_of(self, when: datetime) -> t.Optional["Transaction"]:
-        return self.objects.filter(timestamp__lte=when).last()
+    def as_of(cls, when: datetime) -> t.Optional["Transaction"]:
+        return cls.objects.filter(timestamp__lte=when).last()
 
 
 class StoredFact(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid7)
+    id: models.UUIDField[UUID, UUID] = models.UUIDField(
+        primary_key=True, default=uuid7
+    )
 
-    subject: str = models.CharField(max_length=64)
-    verb: str = models.CharField(max_length=64)
-    obj: str = models.CharField(max_length=64)
+    subject: models.CharField[str, str] = models.CharField(max_length=64)
+    verb: models.CharField[str, str] = models.CharField(max_length=64)
+    obj: models.CharField[str, str] = models.CharField(max_length=64)
 
     # flag active when this rule was derived
-    is_inferred = models.BooleanField()
+    is_inferred: models.BooleanField[bool, bool] = models.BooleanField()
 
     # on which transaction was this added
     added_id: UUID
-    added: Transaction = models.ForeignKey(
-        Transaction, models.PROTECT, related_name="added_facts"
+    added: models.ForeignKey[Transaction, Transaction] = models.ForeignKey(
+        Transaction, models.PROTECT, related_name="added_facts"  # type: ignore
     )
 
     # on which transaction was this deleted
     removed_id: t.Optional[UUID]
-    removed: t.Optional[Transaction] = models.ForeignKey(
+    removed: models.ForeignKey[
+        t.Optional[Transaction], t.Optional[Transaction]
+    ] = models.ForeignKey(
         Transaction,
-        models.PROTECT,
+        models.PROTECT,  # type: ignore
         null=True,
         related_name="removed_facts",
     )
 
-    objects: StoredFactQS = StoredFactQS.as_manager()
+    objects: StoredFactQS = StoredFactQS.as_manager()  # type: ignore
 
-    class Meta:
+    class Meta:  # type: ignore
         unique_together = [["subject", "verb", "obj", "removed"]]
         indexes = [
             # used to delete InferredSolutions
@@ -307,21 +313,27 @@ class InferredSolution(models.Model):
     of this model
     """
 
-    id: UUID = models.UUIDField(primary_key=True, default=uuid7)
+    id: models.UUIDField[UUID, UUID] = models.UUIDField(
+        primary_key=True, default=uuid7
+    )
 
-    inferred_fact = models.ForeignKey(
+    inferred_fact: models.ForeignKey[
+        StoredFact, StoredFact
+    ] = models.ForeignKey(
         StoredFact,
-        on_delete=models.PROTECT,
+        on_delete=models.PROTECT,  # type: ignore
         related_name="inferred_by",
     )
-    inferred_fact_hash = models.CharField(max_length=32)
+    inferred_fact_hash: models.CharField[str, str] = models.CharField(
+        max_length=32
+    )
 
-    rule_id: str = models.CharField(max_length=32)
+    rule_id: models.CharField[str, str] = models.CharField(max_length=32)
 
     # join of inferred_fact_id and base_facts_hash
-    solution_hash = models.CharField(max_length=64)
+    solution_hash: models.CharField[str, str] = models.CharField(max_length=64)
 
-    class Meta:
+    class Meta:  # type: ignore
         indexes = [
             models.Index(fields=["rule_id"]),
             models.Index(

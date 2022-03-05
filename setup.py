@@ -6,7 +6,7 @@ HERE = Path(__file__).absolute().parent
 README = open(HERE / "README.md", encoding="utf8").read()
 
 setup(
-    name="django-fact",
+    name="django-triplets",
     version="0.0.1b0",
     url="https://github.com/edelvalle/django-triplets",
     author="Eddy Ernesto del Valle Pino",
@@ -24,6 +24,7 @@ setup(
         "dev": [
             "black",
             "coverage",
+            "django-stubs",
             "django-stubs-ext",
             "django",
             "flake8",

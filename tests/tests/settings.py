@@ -10,7 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 import sys
+import typing as t
 from pathlib import Path
+
+import django_stubs_ext
+
+django_stubs_ext.monkeypatch()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -54,7 +59,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "tests.urls"
 
-TEMPLATES = [
+TEMPLATES: list[dict[str, t.Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],

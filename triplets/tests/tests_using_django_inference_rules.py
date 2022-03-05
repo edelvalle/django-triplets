@@ -21,11 +21,11 @@ class TestInference(common.TestUsingDjango):
                 [
                     Solution(
                         {"sibling1": "sister", "sibling2": "brother"},
-                        {("sister", "sibling_of", "brother")},
+                        frozenset({("sister", "sibling_of", "brother")}),
                     ),
                     Solution(
                         {"sibling1": "brother", "sibling2": "sister"},
-                        {("brother", "sibling_of", "sister")},
+                        frozenset({("brother", "sibling_of", "sister")}),
                     ),
                 ],
             )
@@ -51,31 +51,33 @@ class TestInference(common.TestUsingDjango):
                 [
                     Solution(
                         {"a": "brother", "b": "father"},
-                        {("brother", "descendant_of", "father")},
+                        frozenset({("brother", "descendant_of", "father")}),
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        {("sister", "descendant_of", "father")},
+                        frozenset({("sister", "descendant_of", "father")}),
                     ),
                     Solution(
                         {"a": "father", "b": "grandfather"},
-                        {("father", "descendant_of", "grandfather")},
+                        frozenset({("father", "descendant_of", "grandfather")}),
                     ),
                     Solution(
                         {"a": "brother", "b": "grandfather"},
-                        {("brother", "descendant_of", "grandfather")},
+                        frozenset(
+                            {("brother", "descendant_of", "grandfather")}
+                        ),
                     ),
                     Solution(
                         {"a": "sister", "b": "grandfather"},
-                        {("sister", "descendant_of", "grandfather")},
+                        frozenset({("sister", "descendant_of", "grandfather")}),
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        {("brother", "descendant_of", "mother")},
+                        frozenset({("brother", "descendant_of", "mother")}),
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        {("sister", "descendant_of", "mother")},
+                        frozenset({("sister", "descendant_of", "mother")}),
                     ),
                 ],
             )
@@ -103,19 +105,19 @@ class TestInference(common.TestUsingDjango):
                 [
                     Solution(
                         {"a": "brother", "b": "father"},
-                        {("brother", "descendant_of", "father")},
+                        frozenset({("brother", "descendant_of", "father")}),
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        {("sister", "descendant_of", "father")},
+                        frozenset({("sister", "descendant_of", "father")}),
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        {("brother", "descendant_of", "mother")},
+                        frozenset({("brother", "descendant_of", "mother")}),
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        {("sister", "descendant_of", "mother")},
+                        frozenset({("sister", "descendant_of", "mother")}),
                     ),
                 ],
             )
@@ -142,15 +144,15 @@ class TestInference(common.TestUsingDjango):
             [
                 Solution(
                     {"a": "father"},
-                    {("father", "descendant_of", "grandfather")},
+                    frozenset({("father", "descendant_of", "grandfather")}),
                 ),
                 Solution(
                     {"a": "brother"},
-                    {("brother", "descendant_of", "grandfather")},
+                    frozenset({("brother", "descendant_of", "grandfather")}),
                 ),
                 Solution(
                     {"a": "sister"},
-                    {("sister", "descendant_of", "grandfather")},
+                    frozenset({("sister", "descendant_of", "grandfather")}),
                 ),
             ],
         )

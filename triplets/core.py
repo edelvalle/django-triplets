@@ -10,7 +10,7 @@ Fact = tuple[str, str, str]
 Context = dict[str, t.Any]
 
 
-def storage_hash(text):
+def storage_hash(text: str):
     """Returns a 32 chars string hash"""
     return shake_128(text.encode()).hexdigest(16)
 
@@ -74,7 +74,7 @@ def expression_matches(
         return {expression.name: value} if value in expression.values else None
     elif isinstance(expression, Var):
         return {expression.name: value}
-    elif isinstance(expression, AnyType):
+    else:
         return {}
 
 
@@ -98,7 +98,7 @@ def substitute_using(
 
 
 @dataclass(frozen=True)
-class Clause(t.Iterable):
+class Clause(t.Iterable[Expression]):
     subject: Expression
     verb: str
     obj: Expression
@@ -121,7 +121,7 @@ class Clause(t.Iterable):
                 clause = replace(clause, **{name: new_value})
         return clause
 
-    def __lt__(self, other):
+    def __lt__(self, other: "Clause") -> bool:
         """This is here for the sorting protocol and query optimization"""
         return self.sorting_key < other.sorting_key
 
@@ -170,11 +170,12 @@ class Clause(t.Iterable):
         return Solution(context, frozenset([fact]))
 
 
-PredicateTuples = list[tuple[Expression, str, Expression]]
+ClauseTuple = tuple[Expression, str, Expression]
+PredicateTuples = t.Sequence[ClauseTuple]
 
 
 @dataclass(slots=True)
-class Predicate(t.Iterable):
+class Predicate(t.Iterable[Clause]):
     clauses: list[Clause]
 
     @classmethod
@@ -206,7 +207,7 @@ class Predicate(t.Iterable):
     def __bool__(self) -> bool:
         return bool(self.clauses)
 
-    def __add__(self, other) -> "Predicate":
+    def __add__(self, other: "Predicate") -> "Predicate":
         if isinstance(other, list):
             other = self.from_tuples(other)
         return replace(self, clauses=self.clauses + other.clauses)

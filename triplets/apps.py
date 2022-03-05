@@ -1,8 +1,10 @@
+import typing as t
+
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
 
 
-def refresh_inference(sender, **kwargs):
+def refresh_inference(**kwargs: dict[str, t.Any]):
     from . import api
 
     print("Refreshing inference rules... ", end="", flush=True)

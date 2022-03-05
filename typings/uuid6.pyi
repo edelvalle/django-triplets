@@ -1,0 +1,3 @@
+from uuid import UUID
+
+def uuid7() -> UUID: ...
