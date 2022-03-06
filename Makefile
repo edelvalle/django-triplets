@@ -8,7 +8,7 @@ install:
 	python setup.py develop
 
 check:
-	black --check --diff triplets/ tests/
+	black --check --diff triplets/
 	pyright
 
 test:
