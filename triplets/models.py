@@ -1,5 +1,6 @@
 import typing as t
 from datetime import datetime, timezone
+from itertools import chain
 from uuid import UUID
 
 from django.conf import settings
@@ -8,9 +9,14 @@ from uuid6 import uuid7
 
 from . import core
 
-INFERENCE_RULES: list[core.Rule] = getattr(
+INFERENCE_RULES: t.Sequence[core.Rule] = getattr(
     settings, "TRIPLETS_INFERENCE_RULES", []
 )
+
+SETTINGS_ATTRIBUTES: t.Sequence[core.Attr] = getattr(
+    settings, "TRIPLETS_ATTRIBUTES", []
+)
+ATTRIBUTES = {attr.name: attr for attr in SETTINGS_ATTRIBUTES}
 
 
 NANO_SECOND = 10**9
@@ -36,13 +42,18 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
 
-    def bulk_add(self, facts: t.Sequence[core.Fact]):
+    def bulk_add(
+        self,
+        facts: t.Sequence[core.Fact],
+        tx_id: t.Optional[UUID] = None,
+    ):
         """Use this method to add many facts to the knowledge base.
         This method has better performance than adding the facts one by one.
         """
-        tx = Transaction.new()
+        tx_id = tx_id or Transaction.new().id
+        self._remove_previous_values(set(facts), tx_id)
         self._bulk_add(
-            tx.id,
+            tx_id,
             [(fact, None, None) for fact in facts],
         )
 
@@ -58,10 +69,11 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         ],
     ):
         while fact_rule_id_bases:
-            facts_to_store = {
-                fact: rule_id is not None
-                for fact, rule_id, _ in fact_rule_id_bases
-            }
+            facts = {fact for fact, _, _, in fact_rule_id_bases}
+            is_inferred = any(
+                rule_id is not None for _, rule_id, _ in fact_rule_id_bases
+            )
+
             stored_facts = self.bulk_create(
                 (
                     StoredFact(
@@ -69,7 +81,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                         is_inferred=is_inferred,
                         **Fact.as_dict(fact),
                     )
-                    for fact, is_inferred in facts_to_store.items()
+                    for fact in facts
                 ),
                 ignore_conflicts=True,
             )
@@ -102,28 +114,49 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                     self._lookup,
                 )
             )
+        self._garbage_collect(tx_id)
+
+    def _remove_previous_values(
+        self,
+        facts: set[core.Fact],
+        tx_id: UUID,
+    ):
+        cardinality_one_facts = [
+            fact for fact in facts if ATTRIBUTES[fact[1]].cardinality == "one"
+        ]
+        facts_to_remove = set(
+            chain(
+                *(
+                    self._lookup(core.Clause(entity, attr, core.Any))
+                    for entity, attr, _ in cardinality_one_facts
+                )
+            )
+        )
+        if facts_to_remove:
+            self.bulk_remove(facts_to_remove, tx_id=tx_id)
 
     def remove(self, fact: core.Fact):
         """Removes a fact form the knowledge base"""
-        self.bulk_remove([fact])
+        self.bulk_remove({fact})
 
-    def bulk_remove(self, facts: t.Sequence[core.Fact]):
-        tx = Transaction.new()
-        facts_set = set(facts)
+    def bulk_remove(
+        self, facts: set[core.Fact], tx_id: t.Optional[UUID] = None
+    ):
+        tx_id = tx_id or Transaction.new().id
 
         q = models.Q()
-        for fact in facts_set:
+        for fact in facts:
             q |= models.Q(**Fact.as_dict(fact))
 
         stored_facts = self._is_inferred(False)._as_of_now().filter(q)
-        if stored_facts.count() != len(facts_set):
+        if stored_facts.count() != len(facts):
             raise ValueError("You can't remove inferred facts")
 
         q = models.Q()
-        while facts_set:
+        while facts:
             next_facts: set[core.Fact] = set()
             for fact, rule_id, bases in core.run_rules_matching(
-                facts_set, INFERENCE_RULES, self._lookup
+                facts, INFERENCE_RULES, self._lookup
             ):
                 next_facts.add(fact)
                 q |= models.Q(
@@ -131,11 +164,11 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                     solution_hash=Fact.storage_key_for_many(bases),
                     inferred_fact_hash=Fact.storage_key(fact),
                 )
-            facts_set = next_facts
+            facts = next_facts
 
         InferredSolution.objects.filter(q).delete()
-        stored_facts.update(removed_id=tx.id)
-        self._garbage_collect(tx.id)
+        stored_facts.update(removed_id=tx_id)
+        self._garbage_collect(tx_id)
 
     def solve(
         self,
@@ -225,6 +258,8 @@ class Transaction(models.Model):
     timestamp: models.DateTimeField[datetime, datetime] = models.DateTimeField(
         db_index=True
     )
+
+    objects: models.Manager["Transaction"]
 
     class Meta:  # type: ignore
         ordering = ["id"]

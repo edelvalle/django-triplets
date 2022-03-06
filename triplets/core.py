@@ -4,9 +4,13 @@ from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
 
-Fact = tuple[str, str, str]
+Entity = str
+Ordinal = str
+
+Fact = tuple[str, str, Ordinal]
 
 
+# TODO: this any here will be an Ordinal
 Context = dict[str, t.Any]
 
 
@@ -16,9 +20,19 @@ def storage_hash(text: str):
 
 
 @dataclass(slots=True)
+class Attr:
+    name: str
+    data_type: t.Type[Ordinal]
+    cardinality: t.Literal["one", "many"]
+
+
+@dataclass(slots=True)
 class Solution:
     context: Context
     derived_from: frozenset[Fact]
+
+    def __hash__(self) -> int:
+        return hash((frozenset(self.context.items()), self.derived_from))
 
     def merge(
         self,

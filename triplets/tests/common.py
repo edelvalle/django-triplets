@@ -1,7 +1,24 @@
+import typing as t
+from datetime import datetime
+from uuid import UUID
+
 from django.test import TestCase
 
 from .. import api, models
-from ..core import Rule, Var, rule
+from ..core import Attr, Ordinal, PredicateTuples, Rule, Var, rule
+
+attributes = {
+    attr.name: attr
+    for attr in [
+        Attr("gender", str, "one"),
+        Attr("child_of", str, "many"),
+        Attr("sibling_of", str, "many"),
+        Attr("descendant_of", str, "many"),
+        Attr("mom_of", str, "many"),
+        Attr("dad_of", str, "many"),
+    ]
+}
+
 
 triplets = [
     # the broder
@@ -18,6 +35,24 @@ triplets = [
     # the grand parent
     ("father", "child_of", "grandfather"),
     ("grandfather", "gender", "m"),
+]
+
+
+parent_role_rules = [
+    rule(
+        [
+            (Var("child"), "child_of", Var("parent")),
+            (Var("parent"), "gender", "m"),
+        ],
+        implies=[(Var("parent"), "dad_of", Var("child"))],
+    ),
+    rule(
+        [
+            (Var("child"), "child_of", Var("parent")),
+            (Var("parent"), "gender", "f"),
+        ],
+        implies=[(Var("parent"), "mom_of", Var("child"))],
+    ),
 ]
 
 
@@ -58,16 +93,32 @@ descendants_rules = [
 
 
 class TestUsingDjango(TestCase):
-
-    solve = api.solve
-    explain_solutions = api.explain_solutions
-
     def tearDown(self):
         models.INFERENCE_RULES = []
 
     def populate_db(self, rules: list[Rule]):
         models.INFERENCE_RULES = rules
+        models.ATTRIBUTES = attributes
         api.bulk_add(triplets)
+
+    def solve(
+        self,
+        query: PredicateTuples,
+        *,
+        as_of: t.Optional[datetime | UUID] = None,
+    ) -> set[frozenset[tuple[str, Ordinal]]]:
+        return {
+            frozenset(solution.items())
+            for solution in api.solve(query, as_of=as_of)
+        }
+
+    def explain_solutions(
+        self,
+        query: PredicateTuples,
+        *,
+        as_of: t.Optional[datetime | UUID] = None,
+    ):
+        return set(api.explain_solutions(query, as_of=as_of))
 
     checkNumQueries = True
 

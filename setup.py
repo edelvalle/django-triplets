@@ -27,10 +27,7 @@ setup(
             "django-stubs",
             "django-stubs-ext",
             "django",
-            "flake8",
             "ipython",
-            "isort",
-            "mypy",
             "line-profiler",
         ]
     },
