@@ -212,11 +212,13 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         "This is used by the core engine to lookup predicates in the database"
         query: dict[str, str | set[str]] = {}
         for name, value in predicate.as_dict.items():
-            if isinstance(value, str):
-                query[name] = value
-            elif isinstance(value, core.In):
-                query[f"{name}__in"] = value.values
-
+            match value:
+                case core.Ordinal(value):
+                    query[name] = value
+                case core.In(_, values):
+                    query[f"{name}__in"] = values
+                case core.AnyType() | core.Var():
+                    ...
         return self.filter(**query).values_list("subject", "verb", "obj")
 
     def _as_of_now(self) -> "StoredFactQS":

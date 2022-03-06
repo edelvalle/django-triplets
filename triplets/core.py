@@ -76,20 +76,21 @@ Expression = AnyType | Var | In | str
 
 
 def expression_matches(
-    expression: Expression, value: str
-) -> t.Optional[dict[str, str]]:
+    expression: Expression, value: Ordinal
+) -> t.Optional[Context]:
     """Returns the micro solution of matching an Expression over a value.
 
     Returning None means that there was no match
     """
-    if isinstance(expression, str):
-        return {} if expression == value else None
-    elif isinstance(expression, In):
-        return {expression.name: value} if value in expression.values else None
-    elif isinstance(expression, Var):
-        return {expression.name: value}
-    else:
-        return {}
+    match expression:
+        case Ordinal(string_value):
+            return {} if string_value == value else None
+        case In(name, values):
+            return {name: value} if value in values else None
+        case Var(name):
+            return {name: value}
+        case AnyType():
+            return {}
 
 
 def substitute_using(
@@ -130,9 +131,12 @@ class Clause(t.Iterable[Expression]):
 
         clause = self
         for name, value in [("subject", self.subject), ("obj", self.obj)]:
-            if isinstance(value, (Var, In)):
-                new_value = substitute_using(value, contexts)
-                clause = replace(clause, **{name: new_value})
+            match value:
+                case Var() | In():
+                    new_value = substitute_using(value, contexts)
+                    clause = replace(clause, **{name: new_value})
+                case AnyType() | Ordinal():
+                    ...
         return clause
 
     def __lt__(self, other: "Clause") -> bool:
@@ -146,12 +150,15 @@ class Clause(t.Iterable[Expression]):
         """
         weight = 0
         for value in [self.subject, self.obj]:
-            if isinstance(value, In):
-                weight += 1
-            elif isinstance(value, Var):
-                weight += 3
-            elif isinstance(value, AnyType):
-                weight += 7
+            match value:
+                case Ordinal():
+                    weight += 0
+                case In():
+                    weight += 1
+                case Var():
+                    weight += 3
+                case AnyType():
+                    weight += 7
 
         return weight
 
@@ -169,13 +176,13 @@ class Clause(t.Iterable[Expression]):
 
     @property
     def as_fact(self) -> t.Optional[Fact]:
-        if isinstance(self.subject, str) and isinstance(self.obj, str):
+        if isinstance(self.subject, Ordinal) and isinstance(self.obj, Ordinal):
             return (self.subject, self.verb, self.obj)
         else:
             return None
 
     def matches(self, fact: Fact) -> t.Optional[Solution]:
-        context: dict[str, str] = {}
+        context: Context = {}
         for expression, value in zip(self, fact):
             if (match := expression_matches(expression, value)) is None:
                 return None
