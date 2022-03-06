@@ -1,38 +1,34 @@
 import typing as t
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from functools import cached_property
-from hashlib import shake_128
 from itertools import chain
 
-Entity = str
-Ordinal = str
-
-Fact = tuple[str, str, Ordinal]
-
-
-# TODO: this any here will be an Ordinal
-Context = dict[str, t.Any]
-
-
-def storage_hash(text: str):
-    """Returns a 32 chars string hash"""
-    return shake_128(text.encode()).hexdigest(16)
-
-
-@dataclass(slots=True)
-class Attr:
-    name: str
-    data_type: t.Type[Ordinal]
-    cardinality: t.Literal["one", "many"]
+from .ast import (
+    AttrDict,
+    EntityExpression,
+    TypedExpression,
+    ValueExpression,
+    expression_matches,
+    expression_type,
+    expression_var_name,
+    expression_weight,
+    substitute_using,
+    typed_from_entity,
+    typed_from_value,
+)
+from .bases import Context, Fact, Ordinal, TOrdinal, storage_hash
 
 
 @dataclass(slots=True)
 class Solution:
     context: Context
-    derived_from: frozenset[Fact]
+    derived_from: set[Fact[Ordinal]]
 
     def __hash__(self) -> int:
-        return hash((frozenset(self.context.items()), self.derived_from))
+        return hash(
+            (frozenset(self.context.items()), frozenset(self.derived_from))
+        )
 
     def merge(
         self,
@@ -55,71 +51,11 @@ class Solution:
                 )
 
 
-@dataclass(slots=True)
-class In:
-    name: str
-    values: set[str]
-
-
-@dataclass(slots=True)
-class Var:
-    name: str
-
-
-class AnyType:
-    ...
-
-
-Any = AnyType()
-
-Expression = AnyType | Var | In | str
-
-
-def expression_matches(
-    expression: Expression, value: Ordinal
-) -> t.Optional[Context]:
-    """Returns the micro solution of matching an Expression over a value.
-
-    Returning None means that there was no match
-    """
-    match expression:
-        case Ordinal(string_value):
-            return {} if string_value == value else None
-        case In(name, values):
-            return {name: value} if value in values else None
-        case Var(name):
-            return {name: value}
-        case AnyType():
-            return {}
-
-
-def substitute_using(
-    expression: Var | In, contexts: list[Context]
-) -> Expression:
-    values = {
-        value
-        for ctx in contexts
-        if (value := ctx.get(expression.name)) is not None
-    }
-    if not values:
-        # no values found means that the variable still not defined
-        return expression
-    elif len(values) == 1:
-        # just one value found means that this is now a literal
-        return values.pop()
-    else:
-        # a few values found means this is an In expression
-        return In(expression.name, values)
-
-
 @dataclass(frozen=True)
-class Clause(t.Iterable[Expression]):
-    subject: Expression
+class Clause(t.Generic[TOrdinal]):
+    subject: TypedExpression[str]
     verb: str
-    obj: Expression
-
-    def __iter__(self) -> t.Iterator[Expression]:
-        return iter([self.subject, self.verb, self.obj])
+    obj: TypedExpression[TOrdinal]
 
     def substitute_using(self, contexts: list[Context]):
         """Replaces variables in this predicate with their values form the
@@ -129,89 +65,93 @@ class Clause(t.Iterable[Expression]):
         if not contexts:
             return self
 
-        clause = self
-        for name, value in [("subject", self.subject), ("obj", self.obj)]:
-            match value:
-                case Var() | In():
-                    new_value = substitute_using(value, contexts)
-                    clause = replace(clause, **{name: new_value})
-                case AnyType() | Ordinal():
-                    ...
-        return clause
+        new_subject = substitute_using(self.subject, contexts)
+        new_object = substitute_using(self.obj, contexts)
+        return replace(self, subject=new_subject, object=new_object)
 
-    def __lt__(self, other: "Clause") -> bool:
+    def __lt__(self, other: "Clause[t.Any]") -> bool:
         """This is here for the sorting protocol and query optimization"""
         return self.sorting_key < other.sorting_key
 
     @cached_property
-    def sorting_key(self):
+    def sorting_key(self) -> int:
         """The more defined (literal values) this clause has, the lower
         the sorting number will be. So it gets priority when performing queries.
         """
-        weight = 0
-        for value in [self.subject, self.obj]:
-            match value:
-                case Ordinal():
-                    weight += 0
-                case In():
-                    weight += 1
-                case Var():
-                    weight += 3
-                case AnyType():
-                    weight += 7
-
-        return weight
+        return expression_weight(self.subject) + expression_weight(self.obj)
 
     @property
-    def variable_names(self) -> list[str]:
-        return [
-            expression.name
-            for expression in [self.subject, self.obj]
-            if isinstance(expression, (Var, In))
-        ]
+    def variable_types(self) -> defaultdict[str, set[t.Type[Ordinal]]]:
+        variable_types: defaultdict[str, set[t.Type[Ordinal]]] = defaultdict(
+            set
+        )
+        if name := expression_var_name(self.subject):
+            variable_types[name].add(expression_type(self.subject))
+        if name := expression_var_name(self.obj):
+            variable_types[name].add(expression_type(self.obj))
+        return variable_types
 
     @property
-    def as_dict(self) -> dict[str, Expression]:
+    def as_dict(self) -> dict[str, TypedExpression[Ordinal]]:
         return dict(self.__dict__)
 
     @property
-    def as_fact(self) -> t.Optional[Fact]:
-        if isinstance(self.subject, Ordinal) and isinstance(self.obj, Ordinal):
+    def as_fact(self) -> t.Optional[Fact[TOrdinal]]:
+        if isinstance(self.subject, str) and isinstance(self.obj, Ordinal):
             return (self.subject, self.verb, self.obj)
         else:
             return None
 
-    def matches(self, fact: Fact) -> t.Optional[Solution]:
-        context: Context = {}
-        for expression, value in zip(self, fact):
-            if (match := expression_matches(expression, value)) is None:
-                return None
-            else:
-                context |= match
-        return Solution(context, frozenset([fact]))
+    def matches(self, fact: Fact[TOrdinal]) -> t.Optional[Solution]:
+        subject, verb, obj = fact
+        if self.verb != verb:
+            return None
+        if (subject_match := expression_matches(self.subject, subject)) is None:
+            return None
+        if (obj_match := expression_matches(self.obj, obj)) is None:
+            return None
+        return Solution(subject_match | obj_match, {fact})
 
 
-ClauseTuple = tuple[Expression, str, Expression]
+ClauseTuple = tuple[EntityExpression, str, ValueExpression]
 PredicateTuples = t.Sequence[ClauseTuple]
 
 
 @dataclass(slots=True)
-class Predicate(t.Iterable[Clause]):
-    clauses: list[Clause]
+class Predicate(t.Iterable[Clause[Ordinal]]):
+    clauses: list[Clause[Ordinal]]
 
     @classmethod
     def from_tuples(
-        cls: t.Type["Predicate"], predicate: PredicateTuples
+        cls: t.Type["Predicate"],
+        predicate: PredicateTuples,
+        attributes: AttrDict,
     ) -> "Predicate":
-        return cls([Clause(*clause) for clause in predicate])
+        return cls(
+            [
+                Clause(
+                    typed_from_entity(entity),
+                    attr,
+                    typed_from_value(value, attributes[attr]),
+                )
+                for entity, attr, value in predicate
+            ]
+        )
 
-    def optimized_by(self, contexts: list[Context]) -> list[Clause]:
+    def __post_init__(self):
+        # validate that the types of all variables are coherent
+        # this will raise if
+        self.variable_types
+
+    def optimized_by(self, contexts: list[Context]) -> list[Clause[Ordinal]]:
         return list(sorted(self.substitute(contexts)))
 
-    def substitute(self, contexts: list[Context]) -> t.Iterable[Clause]:
+    def substitute(
+        self, contexts: list[Context]
+    ) -> t.Iterable[Clause[Ordinal]]:
         return (clause.substitute_using(contexts) for clause in self)
 
-    def matches(self, fact: Fact) -> t.Iterable[Solution]:
+    def matches(self, fact: Fact[Ordinal]) -> t.Iterable[Solution]:
         return (
             solution
             for clause in self
@@ -219,43 +159,56 @@ class Predicate(t.Iterable[Clause]):
         )
 
     @property
-    def variable_names(self) -> set[str]:
-        return set(chain(*[clause.variable_names for clause in self]))
+    def variable_types(self) -> dict[str, t.Type[Ordinal]]:
+        variable_types: defaultdict[str, set[t.Type[Ordinal]]] = defaultdict(
+            set
+        )
+        for clause in self.clauses:
+            for name, types in clause.variable_types.items():
+                variable_types[name].update(types)
 
-    def __iter__(self) -> t.Iterator[Clause]:
+        result: dict[str, t.Type[Ordinal]] = {}
+        for var_name, types in variable_types.items():
+            if len(types) == 1:
+                result[var_name] = types.pop()
+            else:
+                raise TypeError(
+                    f"Variable {var_name} can't have more than one type: "
+                    f"{list(types)}"
+                )
+        return result
+
+    def __iter__(self) -> t.Iterator[Clause[Ordinal]]:
         return iter(self.clauses)
 
     def __bool__(self) -> bool:
         return bool(self.clauses)
 
     def __add__(self, other: "Predicate") -> "Predicate":
-        if isinstance(other, list):
-            other = self.from_tuples(other)
         return replace(self, clauses=self.clauses + other.clauses)
 
 
-LookUpFunction = t.Callable[[Clause], t.Iterable[Fact]]
+LookUpFunction = t.Callable[[Clause[TOrdinal]], t.Iterable[Fact[TOrdinal]]]
 
 
 @dataclass(slots=True)
 class Query:
     predicate: Predicate
     solutions: list[Solution] = field(
-        default_factory=lambda: [Solution({}, frozenset())]
+        default_factory=lambda: [Solution({}, set())]
     )
 
     @classmethod
     def from_tuples(
-        cls: t.Type["Query"],
-        predicate: PredicateTuples,
+        cls: t.Type["Query"], predicate: PredicateTuples, attributes: AttrDict
     ) -> "Query":
-        return cls(Predicate.from_tuples(predicate))
+        return cls(Predicate.from_tuples(predicate, attributes))
 
     @property
-    def optimized_predicate(self) -> list[Clause]:
+    def optimized_predicate(self) -> list[Clause[Ordinal]]:
         return self.predicate.optimized_by([s.context for s in self.solutions])
 
-    def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
+    def solve(self, lookup: LookUpFunction[TOrdinal]) -> t.List[Solution]:
         if self.predicate and self.solutions:
             clause, *predicate = self.optimized_predicate
             predicate_solutions = [
@@ -283,6 +236,7 @@ class Query:
 class Rule:
     predicate: Predicate
     conclusions: Predicate
+    validate_consistency: bool = field(default=True)
 
     @cached_property
     def id(self) -> str:
@@ -293,16 +247,20 @@ class Rule:
         return storage_hash(self.__repr__())
 
     def __post_init__(self):
-        # validate
-        missing_variables = (
-            self.conclusions.variable_names - self.predicate.variable_names
-        )
-        if missing_variables:
-            raise TypeError(
-                f"{self} requires {missing_variables} in the predicate"
-            )
+        # check the predicates can be merged type wise
+        if self.validate_consistency:
+            self.conclusions + self.predicate
 
-    def matches(self, fact: Fact) -> t.Iterable["Rule"]:
+            # check conclusions variables are satisfied by the predicate
+            missing_variables = set(self.conclusions.variable_types) - set(
+                self.predicate.variable_types
+            )
+            if missing_variables:
+                raise TypeError(
+                    f"{self} requires {missing_variables} in the predicate"
+                )
+
+    def matches(self, fact: Fact[Ordinal]) -> t.Iterable["Rule"]:
         """If the `fact` matches this rule this function returns a rule
         that you can run `Rule.run` on to return the derived facts
         """
@@ -313,12 +271,13 @@ class Rule:
                 self,
                 predicate=Predicate(list(predicate)),
                 conclusions=Predicate(list(conclusions)),
+                validate_consistency=False,
             )
 
     def run(
         self,
-        lookup: LookUpFunction,
-    ) -> t.Iterable[tuple[Fact, frozenset[Fact]]]:
+        lookup: LookUpFunction[Ordinal],
+    ) -> t.Iterable[tuple[Fact[Ordinal], set[Fact[Ordinal]]]]:
         for solution in Query(self.predicate).solve(lookup):
             for predicate in self.conclusions.substitute([solution.context]):
                 if fact := predicate.as_fact:
@@ -326,20 +285,25 @@ class Rule:
 
 
 def rule(
+    attributes: AttrDict,
     predicate: PredicateTuples,
     *,
     implies: PredicateTuples,
 ) -> Rule:
     return Rule(
-        Predicate.from_tuples(predicate), Predicate.from_tuples(implies)
+        Predicate.from_tuples(predicate, attributes),
+        Predicate.from_tuples(implies, attributes),
     )
 
 
+InferredFacts = t.Iterable[tuple[Fact[Ordinal], str, set[Fact[Ordinal]]]]
+
+
 def run_rules_matching(
-    facts: t.Iterable[Fact],
+    facts: t.Iterable[Fact[Ordinal]],
     rules: t.Sequence[Rule],
-    lookup: LookUpFunction,
-) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    lookup: LookUpFunction[TOrdinal],
+) -> InferredFacts:
     matching_rules_and_original_ids = [
         (matching_rule, rule.id)
         for fact in facts
@@ -351,8 +315,8 @@ def run_rules_matching(
 
 def refresh_rules(
     rules: t.Sequence[Rule],
-    lookup: LookUpFunction,
-) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    lookup: LookUpFunction[TOrdinal],
+) -> InferredFacts:
     return _run_rules(
         ((rule, rule.id) for rule in rules),
         lookup,
@@ -361,8 +325,8 @@ def refresh_rules(
 
 def _run_rules(
     rules_and_original_ids: t.Iterable[tuple[Rule, str]],
-    lookup: LookUpFunction,
-) -> t.Iterable[tuple[Fact, str, frozenset[Fact]]]:
+    lookup: LookUpFunction[TOrdinal],
+) -> InferredFacts:
     for rule, original_rule_id in rules_and_original_ids:
         for fact, bases in rule.run(lookup):
             yield fact, original_rule_id, bases
