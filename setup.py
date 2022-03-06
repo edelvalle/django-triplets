@@ -27,6 +27,7 @@ setup(
             "django-stubs",
             "django-stubs-ext",
             "django",
+            "pyright",
             "ipython",
             "line-profiler",
         ]

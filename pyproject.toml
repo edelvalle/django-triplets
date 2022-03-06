@@ -3,10 +3,9 @@ profile = "black"
 line_length = 80
 
 [tool.pyright]
+pythonVersion = "3.10"
+pythonPlatform = "Linux"
 exclude = [".git", "**/__pycache__", "**/migrations"]
-
-[tool.mypy]
-plugins = ["mypy_django_plugin.main"]
 
 [tool.django-stubs]
 django_settings_module = "tests.settings"

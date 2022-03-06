@@ -8,8 +8,8 @@ install:
 	python setup.py develop
 
 check:
-	black --diff triplets/
-	flake8 triplets/
+	black --check --diff triplets/ tests/
+	pyright
 
 test:
 	cd tests; python manage.py test triplets
