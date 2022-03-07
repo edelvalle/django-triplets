@@ -11,7 +11,6 @@ from .ast import (
     EntityExpression,
     Fact,
     Ordinal,
-    TOrdinal,
     TypedExpression,
     ValueExpression,
     expression_matches,
@@ -32,7 +31,7 @@ def storage_hash(text: str):
 @dataclass(slots=True)
 class Solution:
     context: Context
-    derived_from: set[Fact[Ordinal]]
+    derived_from: set[Fact]
 
     def __hash__(self) -> int:
         return hash(
@@ -65,17 +64,17 @@ PredicateTuples = t.Sequence[ClauseTuple]
 
 
 @dataclass(frozen=True)
-class Clause(t.Generic[TOrdinal]):
-    subject: TypedExpression[str]
+class Clause:
+    subject: TypedExpression
     verb: str
-    obj: TypedExpression[TOrdinal]
+    obj: TypedExpression
 
     @classmethod
     def from_tuple(
-        cls: t.Type["Clause[TOrdinal]"],
+        cls: t.Type["Clause"],
         clause: ClauseTuple,
         attributes: AttrDict,
-    ) -> "Clause[Ordinal]":
+    ) -> "Clause":
         entity, attr, value = clause
         return cls(
             typed_from_entity(entity),
@@ -95,7 +94,7 @@ class Clause(t.Generic[TOrdinal]):
         new_obj = substitute_using(self.obj, contexts)
         return replace(self, subject=new_subject, obj=new_obj)
 
-    def __lt__(self, other: "Clause[t.Any]") -> bool:
+    def __lt__(self, other: "Clause") -> bool:
         """This is here for the sorting protocol and query optimization"""
         return self.sorting_key < other.sorting_key
 
@@ -118,17 +117,17 @@ class Clause(t.Generic[TOrdinal]):
         return variable_types
 
     @property
-    def as_dict(self) -> dict[str, TypedExpression[Ordinal]]:
+    def as_dict(self) -> dict[str, TypedExpression]:
         return dict(self.__dict__)
 
     @property
-    def as_fact(self) -> t.Optional[Fact[TOrdinal]]:
+    def as_fact(self) -> t.Optional[Fact]:
         if isinstance(self.subject, str) and isinstance(self.obj, Ordinal):
             return (self.subject, self.verb, self.obj)
         else:
             return None
 
-    def matches(self, fact: Fact[TOrdinal]) -> t.Optional[Solution]:
+    def matches(self, fact: Fact) -> t.Optional[Solution]:
         subject, verb, obj = fact
         if self.verb != verb:
             return None
@@ -140,8 +139,8 @@ class Clause(t.Generic[TOrdinal]):
 
 
 @dataclass(slots=True)
-class Predicate(t.Iterable[Clause[Ordinal]]):
-    clauses: list[Clause[Ordinal]]
+class Predicate(t.Iterable[Clause]):
+    clauses: list[Clause]
 
     @classmethod
     def from_tuples(
@@ -158,15 +157,13 @@ class Predicate(t.Iterable[Clause[Ordinal]]):
         # this will raise if
         self.variable_types
 
-    def optimized_by(self, contexts: list[Context]) -> list[Clause[Ordinal]]:
+    def optimized_by(self, contexts: list[Context]) -> list[Clause]:
         return list(sorted(self.substitute(contexts)))
 
-    def substitute(
-        self, contexts: list[Context]
-    ) -> t.Iterable[Clause[Ordinal]]:
+    def substitute(self, contexts: list[Context]) -> t.Iterable[Clause]:
         return (clause.substitute_using(contexts) for clause in self)
 
-    def matches(self, fact: Fact[Ordinal]) -> t.Iterable[Solution]:
+    def matches(self, fact: Fact) -> t.Iterable[Solution]:
         return (
             solution
             for clause in self
@@ -193,7 +190,7 @@ class Predicate(t.Iterable[Clause[Ordinal]]):
                 )
         return result
 
-    def __iter__(self) -> t.Iterator[Clause[Ordinal]]:
+    def __iter__(self) -> t.Iterator[Clause]:
         return iter(self.clauses)
 
     def __bool__(self) -> bool:
@@ -203,7 +200,7 @@ class Predicate(t.Iterable[Clause[Ordinal]]):
         return replace(self, clauses=self.clauses + other.clauses)
 
 
-LookUpFunction = t.Callable[[Clause[TOrdinal]], t.Iterable[Fact[TOrdinal]]]
+LookUpFunction = t.Callable[[Clause], t.Iterable[Fact]]
 
 
 @dataclass(slots=True)
@@ -220,10 +217,10 @@ class Query:
         return cls(Predicate.from_tuples(predicate, attributes))
 
     @property
-    def optimized_predicate(self) -> list[Clause[Ordinal]]:
+    def optimized_predicate(self) -> list[Clause]:
         return self.predicate.optimized_by([s.context for s in self.solutions])
 
-    def solve(self, lookup: LookUpFunction[TOrdinal]) -> t.List[Solution]:
+    def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
         if self.predicate and self.solutions:
             clause, *predicate = self.optimized_predicate
             predicate_solutions = [
@@ -275,7 +272,7 @@ class Rule:
                     f"{self} requires {missing_variables} in the predicate"
                 )
 
-    def matches(self, fact: Fact[Ordinal]) -> t.Iterable["Rule"]:
+    def matches(self, fact: Fact) -> t.Iterable["Rule"]:
         """If the `fact` matches this rule this function returns a rule
         that you can run `Rule.run` on to return the derived facts
         """
@@ -291,8 +288,8 @@ class Rule:
 
     def run(
         self,
-        lookup: LookUpFunction[Ordinal],
-    ) -> t.Iterable[tuple[Fact[Ordinal], set[Fact[Ordinal]]]]:
+        lookup: LookUpFunction,
+    ) -> t.Iterable[tuple[Fact, set[Fact]]]:
         for solution in Query(self.predicate).solve(lookup):
             for predicate in self.conclusions.substitute([solution.context]):
                 if fact := predicate.as_fact:
@@ -311,13 +308,13 @@ def rule(
     )
 
 
-InferredFacts = t.Iterable[tuple[Fact[Ordinal], str, set[Fact[Ordinal]]]]
+InferredFacts = t.Iterable[tuple[Fact, str, set[Fact]]]
 
 
 def run_rules_matching(
-    facts: t.Iterable[Fact[Ordinal]],
+    facts: t.Iterable[Fact],
     rules: t.Sequence[Rule],
-    lookup: LookUpFunction[TOrdinal],
+    lookup: LookUpFunction,
 ) -> InferredFacts:
     matching_rules_and_original_ids = [
         (matching_rule, rule.id)
@@ -330,7 +327,7 @@ def run_rules_matching(
 
 def refresh_rules(
     rules: t.Sequence[Rule],
-    lookup: LookUpFunction[TOrdinal],
+    lookup: LookUpFunction,
 ) -> InferredFacts:
     return _run_rules(
         ((rule, rule.id) for rule in rules),
@@ -340,7 +337,7 @@ def refresh_rules(
 
 def _run_rules(
     rules_and_original_ids: t.Iterable[tuple[Rule, str]],
-    lookup: LookUpFunction[TOrdinal],
+    lookup: LookUpFunction,
 ) -> InferredFacts:
     for rule, original_rule_id in rules_and_original_ids:
         for fact, bases in rule.run(lookup):

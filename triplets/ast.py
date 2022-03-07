@@ -5,9 +5,8 @@ Entity = str
 Ordinal = str | int
 
 T = t.TypeVar("T")
-TOrdinal = t.TypeVar("TOrdinal", bound=Ordinal)
 
-Fact = tuple[str, str, TOrdinal]
+Fact = tuple[str, str, Ordinal]
 
 Context = dict[str, Ordinal]
 
@@ -57,72 +56,60 @@ Any = AnyType()
 
 
 @dataclass(slots=True)
-class TypedIn(t.Generic[TOrdinal]):
+class TypedIn:
     name: str
-    values: set[TOrdinal]
-    data_type: t.Type[TOrdinal]
+    values: set[Ordinal]
+    data_type: t.Type[Ordinal]
 
 
 @dataclass(slots=True)
-class TypedVar(t.Generic[TOrdinal]):
+class TypedVar:
     name: str
-    data_type: t.Type[TOrdinal]
+    data_type: t.Type[Ordinal]
 
 
 @dataclass(slots=True)
-class TypedAny(t.Generic[TOrdinal]):
-    data_type: t.Type[TOrdinal]
+class TypedAny:
+    data_type: t.Type[Ordinal]
 
 
 EntityExpression = AnyType | Var | In | str
 ValueExpression = AnyType | Var | In | Ordinal
-TypedExpression: t.TypeAlias = (
-    TypedAny[TOrdinal] | TypedVar[TOrdinal] | TypedIn[TOrdinal] | TOrdinal
-)
+TypedExpression = TypedAny | TypedVar | TypedIn | Ordinal
 
 
-def all_are(values: set[t.Any], ty: t.Type[T]) -> t.TypeGuard[set[T]]:
+def all_are(values: set[t.Any], ty: t.Type[object]) -> bool:
     return all(isinstance(v, ty) for v in values)
 
 
-def typed_from_entity(exp: EntityExpression) -> TypedExpression[str]:
+def typed_from_entity(exp: EntityExpression) -> TypedExpression:
     match exp:
         case str():
             return exp
         case In(name, values):
-            if all_are(values, str):
-                return TypedIn(name, values, str)
-            else:
-                raise TypeError(
-                    f"Entity values should be strings, got: {values}"
-                )
+            assert all_are(
+                values, str
+            ), f"Found values that are not string here: {values}"
+            return TypedIn(name, values, str)
         case Var(name):
             return TypedVar(name, str)
         case AnyType():
             return TypedAny(str)
 
 
-def typed_from_value(
-    exp: ValueExpression, attribute: Attr
-) -> TypedExpression[Ordinal]:
+def typed_from_value(exp: ValueExpression, attribute: Attr) -> TypedExpression:
     match exp:
         case Var(name):
             return TypedVar(name, attribute.data_type)
         case AnyType():
             return TypedAny(attribute.data_type)
         case In(name, values):
-            if all_are(values, attribute.data_type):
-                return TypedIn(name, values, attribute.data_type)
-            else:
-                raise TypeError(
-                    f"Exp {exp} does not have values of type "
-                    f"{attribute.data_type}"
-                )
+            return TypedIn(name, values, attribute.data_type)
         case str(value) | int(value):
             return value
 
 
-def expression_type(exp: TypedExpression[TOrdinal]) -> t.Type[Ordinal]:
+def expression_type(exp: TypedExpression) -> type[Ordinal]:
     match exp:
         case (
             TypedIn(_, _, data_type)
@@ -136,7 +123,7 @@ def expression_type(exp: TypedExpression[TOrdinal]) -> t.Type[Ordinal]:
             return str
 
 
-def expression_weight(exp: TypedExpression[TOrdinal]) -> int:
+def expression_weight(exp: TypedExpression) -> int:
     match exp:
         case int() | str():
             return 0
@@ -148,7 +135,7 @@ def expression_weight(exp: TypedExpression[TOrdinal]) -> int:
             return 7
 
 
-def expression_var_name(exp: TypedExpression[TOrdinal]) -> str | None:
+def expression_var_name(exp: TypedExpression) -> str | None:
     match exp:
         case TypedIn(name) | TypedVar(name):
             return name
@@ -157,7 +144,7 @@ def expression_var_name(exp: TypedExpression[TOrdinal]) -> str | None:
 
 
 def expression_matches(
-    expression: TypedExpression[TOrdinal], value: TOrdinal
+    expression: TypedExpression, value: Ordinal
 ) -> t.Optional[Context]:
     """Returns the micro solution of matching an TypedExpression over a value.
 
@@ -175,8 +162,9 @@ def expression_matches(
 
 
 def substitute_using(
-    expression: TypedExpression[TOrdinal], contexts: list[Context]
-) -> TypedExpression[TOrdinal]:
+    expression: TypedExpression,
+    contexts: list[Context],
+) -> TypedExpression:
     match expression:
         case str() | int() | TypedAny():
             return expression

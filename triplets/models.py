@@ -24,22 +24,22 @@ NANO_SECOND = 10**9
 
 class Fact:
     @classmethod
-    def storage_key(cls, fact: ast.Fact[ast.Ordinal]) -> str:
+    def storage_key(cls, fact: ast.Fact) -> str:
         return core.storage_hash(cls.to_str(fact))
 
     @classmethod
-    def storage_key_for_many(cls, facts: set[ast.Fact[ast.Ordinal]]) -> str:
+    def storage_key_for_many(cls, facts: set[ast.Fact]) -> str:
         return core.storage_hash(
             str(list(sorted(cls.to_str(f) for f in facts)))
         )
 
     @classmethod
-    def as_dict(cls, fact: ast.Fact[ast.Ordinal]) -> ast.Context:
+    def as_dict(cls, fact: ast.Fact) -> ast.Context:
         subject, verb, obj = fact
         return {"subject": subject, "verb": verb, "obj": obj}
 
     @classmethod
-    def to_str(cls, fact: ast.Fact[ast.Ordinal]) -> str:
+    def to_str(cls, fact: ast.Fact) -> str:
         entity, verb, value = fact
         return f"fact:({entity},{verb},{cls.type_name(type(value))}:{value})"
 
@@ -52,13 +52,13 @@ class Fact:
 
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
-    def add(self, fact: ast.Fact[ast.Ordinal]) -> None:
+    def add(self, fact: ast.Fact) -> None:
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
 
     def bulk_add(
         self,
-        facts: t.Sequence[ast.Fact[ast.Ordinal]],
+        facts: t.Sequence[ast.Fact],
         tx_id: t.Optional[UUID] = None,
     ):
         """Use this method to add many facts to the knowledge base.
@@ -76,9 +76,9 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         tx_id: UUID,
         fact_rule_id_bases: t.Sequence[
             tuple[
-                ast.Fact[ast.Ordinal],
+                ast.Fact,
                 t.Optional[str],
-                t.Optional[set[ast.Fact[ast.Ordinal]]],
+                t.Optional[set[ast.Fact]],
             ]
         ],
     ):
@@ -100,7 +100,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 ignore_conflicts=True,
             )
 
-            fact_to_stored_fact_id: dict[ast.Fact[ast.Ordinal], UUID] = {
+            fact_to_stored_fact_id: dict[ast.Fact, UUID] = {
                 stored_fact.as_fact: stored_fact.id
                 for stored_fact in stored_facts
             }
@@ -132,7 +132,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
     def _remove_previous_values(
         self,
-        facts: set[ast.Fact[ast.Ordinal]],
+        facts: set[ast.Fact],
         tx_id: UUID,
     ):
         cardinality_one_facts: dict[tuple[str, str], t.Type[ast.Ordinal]] = {}
@@ -157,13 +157,11 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         if facts_to_remove:
             self.bulk_remove(facts_to_remove, tx_id=tx_id)
 
-    def remove(self, fact: ast.Fact[ast.Ordinal]):
+    def remove(self, fact: ast.Fact):
         """Removes a fact form the knowledge base"""
         self.bulk_remove({fact})
 
-    def bulk_remove(
-        self, facts: set[ast.Fact[ast.Ordinal]], tx_id: t.Optional[UUID] = None
-    ):
+    def bulk_remove(self, facts: set[ast.Fact], tx_id: t.Optional[UUID] = None):
         tx_id = tx_id or Transaction.new().id
 
         q = models.Q()
@@ -176,7 +174,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
         q = models.Q()
         while facts:
-            next_facts: set[ast.Fact[ast.Ordinal]] = set()
+            next_facts: set[ast.Fact] = set()
             for fact, rule_id, bases in core.run_rules_matching(
                 facts, INFERENCE_RULES, self._lookup
             ):
@@ -232,9 +230,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             tx.id, list(core.refresh_rules(INFERENCE_RULES, self._lookup))
         )
 
-    def _lookup(
-        self, predicate: core.Clause[ast.TOrdinal]
-    ) -> t.Iterable[ast.Fact[ast.TOrdinal]]:
+    def _lookup(self, predicate: core.Clause) -> t.Iterable[ast.Fact]:
         "This is used by the core engine to lookup predicates in the database"
         query: dict[str, t.Any] = {
             "verb": predicate.verb,
@@ -246,6 +242,11 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 query["subject__in"] = values
             case ast.TypedAny() | ast.TypedVar():
                 ...
+            case int():
+                raise TypeError(
+                    f"I was not expecting this type {type(predicate.subject)}: "
+                    f"{predicate.subject} here"
+                )
 
         match predicate.obj:
             case int(value) | str(value):
@@ -309,7 +310,7 @@ class Transaction(models.Model):
     @property
     def mutations(
         self,
-    ) -> t.Iterable[tuple[t.Literal["+", "-"], ast.Fact[ast.Ordinal]]]:
+    ) -> t.Iterable[tuple[t.Literal["+", "-"], ast.Fact]]:
         for added in StoredFact.objects.filter(added_id=self.id):
             yield "+", added.as_fact
         for removed in StoredFact.objects.filter(removed_id=self.id):
@@ -393,7 +394,7 @@ class StoredFact(models.Model):
         return f"{self.subject} -({self.verb})-> {self.obj}"
 
     @property
-    def as_fact(self) -> ast.Fact[ast.Ordinal]:
+    def as_fact(self) -> ast.Fact:
         return (self.subject, self.verb, self.obj)
 
 
