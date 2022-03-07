@@ -261,15 +261,10 @@ That's it!
 
 ## TODO
 
-- Add cardinality
-    - An attribute has cardinality, name, data type
-    - Operations on attributes with cardinality one perform a (x, y, Any) remove operations and then the actual add operation (x, y, z)
-
-- Add data types:
-    - Entity expression that is always about strings
-    - There is like an untyped level Expressions that with the support of attribute types compile to their specific type
-    - When evaluating a Predicate the predicate can optimize the queries
-        - Make sure all variables with same name are of the same type
+- Test integer values
+- Rename subject -> entity
+         verb -> attr
+         obj -> value
 
 - Add different kinds of operators to constrain a query
     - Make sure all expressions make sense with the type

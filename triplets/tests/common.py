@@ -1,23 +1,23 @@
 import typing as t
 from datetime import datetime
+from functools import partial
 from uuid import UUID
 
 from django.test import TestCase
 
 from .. import api, models
-from ..core import Attr, Ordinal, PredicateTuples, Rule, Var, rule
+from ..ast import Attr, Ordinal, Var
+from ..core import PredicateTuples, Rule
+from ..core import rule as rule_factory
 
-attributes = {
-    attr.name: attr
-    for attr in [
-        Attr("gender", str, "one"),
-        Attr("child_of", str, "many"),
-        Attr("sibling_of", str, "many"),
-        Attr("descendant_of", str, "many"),
-        Attr("mom_of", str, "many"),
-        Attr("dad_of", str, "many"),
-    ]
-}
+attributes = Attr.as_dict(
+    Attr("gender", str, "one"),
+    Attr("child_of", str, "many"),
+    Attr("sibling_of", str, "many"),
+    Attr("descendant_of", str, "many"),
+    Attr("mom_of", str, "many"),
+    Attr("dad_of", str, "many"),
+)
 
 
 triplets = [
@@ -36,6 +36,9 @@ triplets = [
     ("father", "child_of", "grandfather"),
     ("grandfather", "gender", "m"),
 ]
+
+
+rule = partial(rule_factory, attributes)
 
 
 parent_role_rules = [

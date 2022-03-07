@@ -1,5 +1,5 @@
 
-.PHONY: install check test coverage profile shell migrations
+.PHONY: install check test coverage coverage-html profile shell migrations
 
 
 install:
@@ -16,6 +16,10 @@ test:
 
 coverage:
 	cd tests; coverage run manage.py test triplets --keepdb; coverage report
+
+coverage-html:
+	cd tests; coverage run manage.py test triplets --keepdb; coverage html
+	echo Open: "file://`pwd`/tests/htmlcov/index.html"
 
 profile:
 	cd tests; kernprof -l manage.py test triplets

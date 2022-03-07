@@ -11,6 +11,7 @@ from .ast import (
     EntityExpression,
     Fact,
     Ordinal,
+    TypedAny,
     TypedExpression,
     ValueExpression,
     expression_matches,
@@ -82,6 +83,9 @@ class Clause:
             typed_from_value(value, attributes[attr]),
         )
 
+    def __repr__(self) -> str:
+        return f"({self.subject}, {self.verb}, {self.obj})"
+
     def substitute_using(self, contexts: list[Context]):
         """Replaces variables in this predicate with their values form the
         context
@@ -117,10 +121,6 @@ class Clause:
         return variable_types
 
     @property
-    def as_dict(self) -> dict[str, TypedExpression]:
-        return dict(self.__dict__)
-
-    @property
     def as_fact(self) -> t.Optional[Fact]:
         if isinstance(self.subject, str) and isinstance(self.obj, Ordinal):
             return (self.subject, self.verb, self.obj)
@@ -145,8 +145,8 @@ class Predicate(t.Iterable[Clause]):
     @classmethod
     def from_tuples(
         cls: t.Type["Predicate"],
-        predicate: PredicateTuples,
         attributes: AttrDict,
+        predicate: PredicateTuples,
     ) -> "Predicate":
         return cls(
             [Clause.from_tuple(clause, attributes) for clause in predicate]
@@ -156,6 +156,9 @@ class Predicate(t.Iterable[Clause]):
         # validate that the types of all variables are coherent
         # this will raise if
         self.variable_types
+
+    def __repr__(self) -> str:
+        return str(self.clauses)
 
     def optimized_by(self, contexts: list[Context]) -> list[Clause]:
         return list(sorted(self.substitute(contexts)))
@@ -185,8 +188,7 @@ class Predicate(t.Iterable[Clause]):
                 result[var_name] = types.pop()
             else:
                 raise TypeError(
-                    f"Variable {var_name} can't have more than one type: "
-                    f"{list(types)}"
+                    f"Variable `{var_name}` can't have more than one type, and it has: {[t.__name__ for t in types]}"
                 )
         return result
 
@@ -212,9 +214,11 @@ class Query:
 
     @classmethod
     def from_tuples(
-        cls: t.Type["Query"], predicate: PredicateTuples, attributes: AttrDict
+        cls: t.Type["Query"],
+        attributes: AttrDict,
+        predicate: PredicateTuples,
     ) -> "Query":
-        return cls(Predicate.from_tuples(predicate, attributes))
+        return cls(Predicate.from_tuples(attributes, predicate))
 
     @property
     def optimized_predicate(self) -> list[Clause]:
@@ -269,8 +273,21 @@ class Rule:
             )
             if missing_variables:
                 raise TypeError(
-                    f"{self} requires {missing_variables} in the predicate"
+                    f"{self} is missing {missing_variables} in the predicate"
                 )
+
+            has_any_in_conclusions = any(
+                isinstance(clause.subject, TypedAny)
+                or isinstance(clause.subject, TypedAny)
+                for clause in self.conclusions
+            )
+            if has_any_in_conclusions:
+                raise TypeError(
+                    f"{self} can't have `Any` in it's complications"
+                )
+
+    def __repr__(self) -> str:
+        return f"Rule: {self.predicate} => {self.conclusions}"
 
     def matches(self, fact: Fact) -> t.Iterable["Rule"]:
         """If the `fact` matches this rule this function returns a rule
@@ -303,8 +320,8 @@ def rule(
     implies: PredicateTuples,
 ) -> Rule:
     return Rule(
-        Predicate.from_tuples(predicate, attributes),
-        Predicate.from_tuples(implies, attributes),
+        Predicate.from_tuples(attributes, predicate),
+        Predicate.from_tuples(attributes, implies),
     )
 
 

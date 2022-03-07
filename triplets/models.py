@@ -36,7 +36,11 @@ class Fact:
     @classmethod
     def as_dict(cls, fact: ast.Fact) -> ast.Context:
         subject, verb, obj = fact
-        return {"subject": subject, "verb": verb, "obj": obj}
+        return {
+            "subject": subject,
+            "verb": verb,
+            f"obj_{cls.type_name(type(obj))}": obj,
+        }
 
     @classmethod
     def to_str(cls, fact: ast.Fact) -> str:
@@ -211,7 +215,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         """Solves the `query` and returns all Solutions so you can inspect from
         which facts those solutions are derived from
         """
-        return core.Query.from_tuples(query, ATTRIBUTES).solve(
+        return core.Query.from_tuples(ATTRIBUTES, query).solve(
             self._as_of(as_of)._lookup
         )
 
@@ -251,10 +255,14 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         match predicate.obj:
             case int(value) | str(value):
                 suffix = Fact.type_name(type(predicate.obj))
-                query[f"subject_{suffix}"] = value
+                query[f"obj_{suffix}"] = value
             case ast.TypedIn(_, values, data_type):
-                suffix = Fact.type_name(data_type)
-                query[f"subject_{suffix}__in"] = values
+                if values:
+                    suffix = Fact.type_name(data_type)
+                    query[f"obj_{suffix}__in"] = values
+                else:
+                    # this is looking for nothing, so is safe to abort here
+                    return []
             case ast.TypedAny(data_type) | ast.TypedVar(_, data_type):
                 suffix = Fact.type_name(data_type)
 
@@ -339,8 +347,10 @@ class StoredFact(models.Model):
     subject: models.CharField[str, str] = models.CharField(max_length=64)
     verb: models.CharField[str, str] = models.CharField(max_length=64)
 
-    obj_str: models.CharField[str, str] = models.CharField(max_length=64)
-    obj_int: models.IntegerField[int, int] = models.IntegerField()
+    obj_str: models.CharField[str, str] = models.CharField(
+        max_length=64, null=True
+    )
+    obj_int: models.IntegerField[int, int] = models.IntegerField(null=True)
 
     @property
     def obj(self) -> ast.Ordinal:
@@ -374,8 +384,7 @@ class StoredFact(models.Model):
 
     class Meta:  # type: ignore
         unique_together = [
-            ["subject", "verb", "obj_str", "removed"],
-            ["subject", "verb", "obj_int", "removed"],
+            ["subject", "verb", "obj_str", "obj_int", "removed"],
         ]
         indexes = [
             # used to delete InferredSolutions

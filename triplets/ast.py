@@ -61,16 +61,25 @@ class TypedIn:
     values: set[Ordinal]
     data_type: t.Type[Ordinal]
 
+    def __repr__(self) -> str:
+        return f"({self.name}: {self.data_type.__name__} in {self.values})"
+
 
 @dataclass(slots=True)
 class TypedVar:
     name: str
     data_type: t.Type[Ordinal]
 
+    def __repr__(self) -> str:
+        return f"({self.name}: {self.data_type.__name__})"
+
 
 @dataclass(slots=True)
 class TypedAny:
     data_type: t.Type[Ordinal]
+
+    def __repr__(self) -> str:
+        return f"(*: {self.data_type.__name__})"
 
 
 EntityExpression = AnyType | Var | In | str
@@ -127,8 +136,10 @@ def expression_weight(exp: TypedExpression) -> int:
     match exp:
         case int() | str():
             return 0
-        case TypedIn():
-            return 1
+        case TypedIn(_, values):
+            # if has no values will produce no results,
+            # so should be executed first
+            return 1 if values else -100
         case TypedVar():
             return 3
         case TypedAny():

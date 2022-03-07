@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from .. import api, models
-from ..core import Solution, Var
+from ..ast import Var
+from ..core import Solution
 from . import common
 
 
@@ -21,11 +22,11 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"sibling1": "sister", "sibling2": "brother"},
-                        frozenset({("sister", "sibling_of", "brother")}),
+                        {("sister", "sibling_of", "brother")},
                     ),
                     Solution(
                         {"sibling1": "brother", "sibling2": "sister"},
-                        frozenset({("brother", "sibling_of", "sister")}),
+                        {("brother", "sibling_of", "sister")},
                     ),
                 },
             )
@@ -51,33 +52,31 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"a": "brother", "b": "father"},
-                        frozenset({("brother", "descendant_of", "father")}),
+                        {("brother", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        frozenset({("sister", "descendant_of", "father")}),
+                        {("sister", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "father", "b": "grandfather"},
-                        frozenset({("father", "descendant_of", "grandfather")}),
+                        {("father", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "brother", "b": "grandfather"},
-                        frozenset(
-                            {("brother", "descendant_of", "grandfather")}
-                        ),
+                        {("brother", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "sister", "b": "grandfather"},
-                        frozenset({("sister", "descendant_of", "grandfather")}),
+                        {("sister", "descendant_of", "grandfather")},
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        frozenset({("brother", "descendant_of", "mother")}),
+                        {("brother", "descendant_of", "mother")},
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        frozenset({("sister", "descendant_of", "mother")}),
+                        {("sister", "descendant_of", "mother")},
                     ),
                 },
             )
@@ -105,19 +104,19 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"a": "brother", "b": "father"},
-                        frozenset({("brother", "descendant_of", "father")}),
+                        {("brother", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "sister", "b": "father"},
-                        frozenset({("sister", "descendant_of", "father")}),
+                        {("sister", "descendant_of", "father")},
                     ),
                     Solution(
                         {"a": "brother", "b": "mother"},
-                        frozenset({("brother", "descendant_of", "mother")}),
+                        {("brother", "descendant_of", "mother")},
                     ),
                     Solution(
                         {"a": "sister", "b": "mother"},
-                        frozenset({("sister", "descendant_of", "mother")}),
+                        {("sister", "descendant_of", "mother")},
                     ),
                 },
             )
@@ -147,15 +146,15 @@ class TestInference(common.TestUsingDjango):
             {
                 Solution(
                     {"a": "father"},
-                    frozenset({("father", "descendant_of", "grandfather")}),
+                    {("father", "descendant_of", "grandfather")},
                 ),
                 Solution(
                     {"a": "brother"},
-                    frozenset({("brother", "descendant_of", "grandfather")}),
+                    {("brother", "descendant_of", "grandfather")},
                 ),
                 Solution(
                     {"a": "sister"},
-                    frozenset({("sister", "descendant_of", "grandfather")}),
+                    {("sister", "descendant_of", "grandfather")},
                 ),
             },
         )
@@ -206,7 +205,7 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"dad": "grandfather", "child": "father"},
-                        frozenset({("grandfather", "dad_of", "father")}),
+                        {("grandfather", "dad_of", "father")},
                     ),
                 },
             )
@@ -220,19 +219,19 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"mom": "mother", "child": "brother"},
-                        frozenset({("mother", "mom_of", "brother")}),
+                        {("mother", "mom_of", "brother")},
                     ),
                     Solution(
                         {"mom": "mother", "child": "sister"},
-                        frozenset({("mother", "mom_of", "sister")}),
+                        {("mother", "mom_of", "sister")},
                     ),
                     Solution(
                         {"mom": "father", "child": "brother"},
-                        frozenset({("father", "mom_of", "brother")}),
+                        {("father", "mom_of", "brother")},
                     ),
                     Solution(
                         {"mom": "father", "child": "sister"},
-                        frozenset({("father", "mom_of", "sister")}),
+                        {("father", "mom_of", "sister")},
                     ),
                 },
             )
@@ -255,15 +254,15 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"dad": "father", "child": "brother"},
-                        frozenset({("father", "dad_of", "brother")}),
+                        {("father", "dad_of", "brother")},
                     ),
                     Solution(
                         {"dad": "father", "child": "sister"},
-                        frozenset({("father", "dad_of", "sister")}),
+                        {("father", "dad_of", "sister")},
                     ),
                     Solution(
                         {"dad": "grandfather", "child": "father"},
-                        frozenset({("grandfather", "dad_of", "father")}),
+                        {("grandfather", "dad_of", "father")},
                     ),
                 },
             )
@@ -277,11 +276,11 @@ class TestInference(common.TestUsingDjango):
                 {
                     Solution(
                         {"mom": "mother", "child": "brother"},
-                        frozenset({("mother", "mom_of", "brother")}),
+                        {("mother", "mom_of", "brother")},
                     ),
                     Solution(
                         {"mom": "mother", "child": "sister"},
-                        frozenset({("mother", "mom_of", "sister")}),
+                        {("mother", "mom_of", "sister")},
                     ),
                 },
             )

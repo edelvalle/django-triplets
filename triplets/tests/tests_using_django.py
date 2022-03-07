@@ -1,4 +1,4 @@
-from ..core import Var
+from ..ast import Var
 from . import common
 
 
@@ -11,8 +11,9 @@ class TestDjango(common.TestUsingDjango):
     def test_solving_single_query_with_two_variables(self):
         query = [(Var("child"), "child_of", Var("parent"))]
         with self.assertNumQueries(1):
+            solutions = self.solve(query)
             self.assertSetEqual(
-                self.solve(query),
+                solutions,
                 {
                     frozenset({("child", "brother"), ("parent", "father")}),
                     frozenset({("child", "sister"), ("parent", "father")}),
