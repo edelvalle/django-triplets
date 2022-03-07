@@ -2,11 +2,16 @@ import typing as t
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from functools import cached_property
+from hashlib import shake_128
 from itertools import chain
 
 from .ast import (
     AttrDict,
+    Context,
     EntityExpression,
+    Fact,
+    Ordinal,
+    TOrdinal,
     TypedExpression,
     ValueExpression,
     expression_matches,
@@ -17,7 +22,11 @@ from .ast import (
     typed_from_entity,
     typed_from_value,
 )
-from .bases import Context, Fact, Ordinal, TOrdinal, storage_hash
+
+
+def storage_hash(text: str):
+    """Returns a 32 chars string hash"""
+    return shake_128(text.encode()).hexdigest(16)
 
 
 @dataclass(slots=True)
@@ -51,11 +60,28 @@ class Solution:
                 )
 
 
+ClauseTuple = tuple[EntityExpression, str, ValueExpression]
+PredicateTuples = t.Sequence[ClauseTuple]
+
+
 @dataclass(frozen=True)
 class Clause(t.Generic[TOrdinal]):
     subject: TypedExpression[str]
     verb: str
     obj: TypedExpression[TOrdinal]
+
+    @classmethod
+    def from_tuple(
+        cls: t.Type["Clause[TOrdinal]"],
+        clause: ClauseTuple,
+        attributes: AttrDict,
+    ) -> "Clause[Ordinal]":
+        entity, attr, value = clause
+        return cls(
+            typed_from_entity(entity),
+            attr,
+            typed_from_value(value, attributes[attr]),
+        )
 
     def substitute_using(self, contexts: list[Context]):
         """Replaces variables in this predicate with their values form the
@@ -66,8 +92,8 @@ class Clause(t.Generic[TOrdinal]):
             return self
 
         new_subject = substitute_using(self.subject, contexts)
-        new_object = substitute_using(self.obj, contexts)
-        return replace(self, subject=new_subject, object=new_object)
+        new_obj = substitute_using(self.obj, contexts)
+        return replace(self, subject=new_subject, obj=new_obj)
 
     def __lt__(self, other: "Clause[t.Any]") -> bool:
         """This is here for the sorting protocol and query optimization"""
@@ -113,10 +139,6 @@ class Clause(t.Generic[TOrdinal]):
         return Solution(subject_match | obj_match, {fact})
 
 
-ClauseTuple = tuple[EntityExpression, str, ValueExpression]
-PredicateTuples = t.Sequence[ClauseTuple]
-
-
 @dataclass(slots=True)
 class Predicate(t.Iterable[Clause[Ordinal]]):
     clauses: list[Clause[Ordinal]]
@@ -128,14 +150,7 @@ class Predicate(t.Iterable[Clause[Ordinal]]):
         attributes: AttrDict,
     ) -> "Predicate":
         return cls(
-            [
-                Clause(
-                    typed_from_entity(entity),
-                    attr,
-                    typed_from_value(value, attributes[attr]),
-                )
-                for entity, attr, value in predicate
-            ]
+            [Clause.from_tuple(clause, attributes) for clause in predicate]
         )
 
     def __post_init__(self):

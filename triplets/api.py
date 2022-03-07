@@ -1,4 +1,5 @@
-from .core import Any, Rule, Var, rule
+from .ast import Any, Var
+from .core import Rule, rule
 from .models import StoredFact
 
 __all__ = [

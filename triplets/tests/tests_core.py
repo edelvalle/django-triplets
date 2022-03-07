@@ -1,12 +1,13 @@
 from unittest import TestCase
 
-from ..core import Any, Clause, In, Var, substitute_using
+from ..ast import Any, Attr, In, TypedAny, TypedIn, TypedVar, Var
+from ..core import Clause, Predicate, substitute_using
 
 
 class TestExpressions(TestCase):
 
-    variable_expression = Var("color")
-    in_expression = In("color", {"red"})
+    variable_expression = TypedVar("color", str)
+    in_expression = TypedIn("color", {"red"}, str)
 
     def test_can_substitute_using_a_single_context(self):
         self.assertEqual(
@@ -22,13 +23,13 @@ class TestExpressions(TestCase):
             substitute_using(
                 self.variable_expression, [{"color": "red"}, {"color": "blue"}]
             ),
-            In("color", {"red", "blue"}),
+            TypedIn("color", {"red", "blue"}, str),
         )
         self.assertEqual(
             substitute_using(
                 self.in_expression, [{"color": "red"}, {"color": "blue"}]
             ),
-            In("color", {"red", "blue"}),
+            "red",
         )
 
     def test_substitution_with_non_homogeneous_contexts(self):
@@ -42,13 +43,13 @@ class TestExpressions(TestCase):
             substitute_using(
                 self.in_expression, [{"age": 12}, {"color": "blue"}]
             ),
-            "blue",
+            TypedIn("color", set(), str),
         )
 
     def test_do_not_substitute_of_name_not_found_in_context(self):
         self.assertEqual(
             substitute_using(self.variable_expression, [{"age": 12}]),
-            Var("color"),
+            self.variable_expression,
         )
         self.assertEqual(
             substitute_using(self.in_expression, [{"age": 12}]),
@@ -57,104 +58,126 @@ class TestExpressions(TestCase):
 
 
 class TestPredicate(TestCase):
+
+    attributes = Attr.as_dict(
+        Attr("son_of", str, cardinality="many"),
+        Attr("b", str, cardinality="many"),
+    )
+
     def test_can_substitute_using_a_context_to_a_literal(self):
-        predicate = Clause(Var("person"), "son_of", Var("parent"))
-        self.assertEqual(
-            predicate.substitute_using([{"parent": "PARENT"}]),
-            Clause(Var("person"), "son_of", "PARENT"),
+        clause = Clause.from_tuple(
+            (Var("person"), "son_of", Var("parent")), self.attributes
         )
         self.assertEqual(
-            predicate.substitute_using([{"person": "PERSON"}]),
-            Clause("PERSON", "son_of", Var("parent")),
+            clause.substitute_using([{"parent": "PARENT"}]),
+            Clause(TypedVar("person", str), "son_of", "PARENT"),
         )
         self.assertEqual(
-            predicate.substitute_using([{"unknown": "VALUE"}]),
-            predicate,
+            clause.substitute_using([{"person": "PERSON"}]),
+            Clause("PERSON", "son_of", TypedVar("parent", str)),
+        )
+        self.assertEqual(
+            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause,
         )
 
     def test_can_substitute_contexts_to_in_expression(self):
-        predicate = Clause(Var("person"), "son_of", Var("parent"))
-        self.assertEqual(
-            predicate.substitute_using([{"parent": "A"}, {"parent": "B"}]),
-            Clause(Var("person"), "son_of", In("parent", {"A", "B"})),
+        clause = Clause.from_tuple(
+            (Var("person"), "son_of", Var("parent")), self.attributes
         )
         self.assertEqual(
-            predicate.substitute_using(
+            clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
+            Clause(
+                TypedVar("person", str),
+                "son_of",
+                TypedIn("parent", {"A", "B"}, str),
+            ),
+        )
+        self.assertEqual(
+            clause.substitute_using(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
-            Clause("P", "son_of", In("parent", {"A", "B"})),
+            Clause("P", "son_of", TypedIn("parent", {"A", "B"}, str)),
         )
         self.assertEqual(
-            predicate.substitute_using([{"unknown": "VALUE"}]),
-            predicate,
+            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause,
         )
 
     def test_can_substitute_contexts_to_any_expression(self):
-        predicate = Clause(Var("person"), "son_of", Any)
-        self.assertEqual(
-            predicate.substitute_using([{"parent": "A"}, {"parent": "B"}]),
-            Clause(Var("person"), "son_of", Any),
+        clause = Clause.from_tuple(
+            (Var("person"), "son_of", Any), self.attributes
         )
         self.assertEqual(
-            predicate.substitute_using(
+            clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
+            Clause(TypedVar("person", str), "son_of", TypedAny(str)),
+        )
+        self.assertEqual(
+            clause.substitute_using(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
-            Clause("P", "son_of", Any),
+            Clause("P", "son_of", TypedAny(str)),
         )
         self.assertEqual(
-            predicate.substitute_using([{"unknown": "VALUE"}]),
-            predicate,
+            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause,
         )
 
     def test_sorting_protocol_prioritize_the_more_literal_one(self):
-        predicate = [
-            Clause(Any, "b", In("c", set())),
-            Clause(In("a", set()), "b", In("c", set())),
-            Clause(In("a", set()), "b", Var("c")),
-            Clause(Var("a"), "b", In("c", set())),
-            Clause("a", "b", In("c", set())),
-            Clause(In("a", set()), "b", "c"),
-            Clause(Var("a"), "b", Var("c")),
-            Clause("a", "b", Var("c")),
-            Clause(Var("a"), "b", "c"),
-            Clause("a", "b", "c"),
-        ]
+        predicate = Predicate.from_tuples(
+            [
+                (Any, "b", In("c", set())),
+                (In("a", set()), "b", In("c", set())),
+                (In("a", set()), "b", Var("c")),
+                (Var("a"), "b", In("c", set())),
+                ("a", "b", In("c", set())),
+                (In("a", set()), "b", "c"),
+                (Var("a"), "b", Var("c")),
+                ("a", "b", Var("c")),
+                (Var("a"), "b", "c"),
+                ("a", "b", "c"),
+            ],
+            self.attributes,
+        )
 
-        predicate.sort()
         self.assertListEqual(
-            predicate,
+            predicate.optimized_by([{}]),
             [
                 Clause("a", "b", "c"),
-                Clause("a", "b", In("c", set())),
-                Clause(In("a", set()), "b", "c"),
-                Clause(In("a", set()), "b", In("c", set())),
-                Clause("a", "b", Var("c")),
-                Clause(Var("a"), "b", "c"),
-                Clause(In("a", set()), "b", Var("c")),
-                Clause(Var("a"), "b", In("c", set())),
-                Clause(Var("a"), "b", Var("c")),
-                Clause(Any, "b", In("c", set())),
+                Clause("a", "b", TypedIn("c", set(), str)),
+                Clause(TypedIn("a", set(), str), "b", "c"),
+                Clause(TypedIn("a", set(), str), "b", TypedIn("c", set(), str)),
+                Clause("a", "b", TypedVar("c", str)),
+                Clause(TypedVar("a", str), "b", "c"),
+                Clause(TypedIn("a", set(), str), "b", TypedVar("c", str)),
+                Clause(TypedVar("a", str), "b", TypedIn("c", set(), str)),
+                Clause(TypedVar("a", str), "b", TypedVar("c", str)),
+                Clause(TypedAny(str), "b", TypedIn("c", set(), str)),
             ],
         )
 
     def test_variable_names_returns_the_name_of_the_variables(self):
-        self.assertListEqual(
-            Clause(Var("person"), "son_of", Var("parent")).variable_names,
-            ["person", "parent"],
+        self.assertDictEqual(
+            Clause(
+                TypedVar("person", str), "son_of", TypedVar("parent", str)
+            ).variable_types,
+            {"person": {str}, "parent": {str}},
         )
-        self.assertListEqual(
-            Clause("subject", "verb", "obj").variable_names,
-            [],
+        self.assertDictEqual(
+            Clause("subject", "verb", "obj").variable_types,
+            {},
         )
-        self.assertListEqual(
-            Clause(Var("subject"), "verb", "obj").variable_names,
-            ["subject"],
+        self.assertDictEqual(
+            Clause(TypedVar("subject", str), "verb", "obj").variable_types,
+            {"subject": {str}},
         )
-        self.assertListEqual(
-            Clause("subject", "verb", Var("obj")).variable_names,
-            ["obj"],
+        self.assertDictEqual(
+            Clause("subject", "verb", TypedVar("obj", int)).variable_types,
+            {"obj": {int}},
         )
-        self.assertListEqual(
-            Clause(In("subject", set()), "verb", Var("obj")).variable_names,
-            ["subject", "obj"],
+        self.assertDictEqual(
+            Clause(
+                TypedIn("subject", set(), str), "verb", TypedVar("obj", int)
+            ).variable_types,
+            {"subject": {str}, "obj": {int}},
         )

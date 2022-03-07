@@ -7,13 +7,13 @@ from django.conf import settings
 from django.db import models
 from uuid6 import uuid7
 
-from . import core
+from . import ast, core
 
 INFERENCE_RULES: t.Sequence[core.Rule] = getattr(
     settings, "TRIPLETS_INFERENCE_RULES", []
 )
 
-SETTINGS_ATTRIBUTES: t.Sequence[core.Attr] = getattr(
+SETTINGS_ATTRIBUTES: t.Sequence[ast.Attr] = getattr(
     settings, "TRIPLETS_ATTRIBUTES", []
 )
 ATTRIBUTES = {attr.name: attr for attr in SETTINGS_ATTRIBUTES}
@@ -23,28 +23,42 @@ NANO_SECOND = 10**9
 
 
 class Fact:
-    @staticmethod
-    def storage_key(fact: core.Fact) -> str:
-        return core.storage_hash(f"fact:{fact}")
+    @classmethod
+    def storage_key(cls, fact: ast.Fact[ast.Ordinal]) -> str:
+        return core.storage_hash(cls.to_str(fact))
 
-    @staticmethod
-    def storage_key_for_many(facts: frozenset[core.Fact]) -> str:
-        return core.storage_hash(str(list(sorted(facts))))
+    @classmethod
+    def storage_key_for_many(cls, facts: set[ast.Fact[ast.Ordinal]]) -> str:
+        return core.storage_hash(
+            str(list(sorted(cls.to_str(f) for f in facts)))
+        )
 
-    @staticmethod
-    def as_dict(fact: core.Fact) -> dict[str, str]:
+    @classmethod
+    def as_dict(cls, fact: ast.Fact[ast.Ordinal]) -> ast.Context:
         subject, verb, obj = fact
         return {"subject": subject, "verb": verb, "obj": obj}
 
+    @classmethod
+    def to_str(cls, fact: ast.Fact[ast.Ordinal]) -> str:
+        entity, verb, value = fact
+        return f"fact:({entity},{verb},{cls.type_name(type(value))}:{value})"
+
+    @staticmethod
+    def type_name(ty: t.Type[ast.Ordinal]) -> str:
+        if ty == str:
+            return "str"
+        else:
+            return "int"
+
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
-    def add(self, fact: core.Fact) -> None:
+    def add(self, fact: ast.Fact[ast.Ordinal]) -> None:
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
 
     def bulk_add(
         self,
-        facts: t.Sequence[core.Fact],
+        facts: t.Sequence[ast.Fact[ast.Ordinal]],
         tx_id: t.Optional[UUID] = None,
     ):
         """Use this method to add many facts to the knowledge base.
@@ -62,9 +76,9 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         tx_id: UUID,
         fact_rule_id_bases: t.Sequence[
             tuple[
-                core.Fact,
+                ast.Fact[ast.Ordinal],
                 t.Optional[str],
-                t.Optional[frozenset[core.Fact]],
+                t.Optional[set[ast.Fact[ast.Ordinal]]],
             ]
         ],
     ):
@@ -86,7 +100,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 ignore_conflicts=True,
             )
 
-            fact_to_stored_fact_id: dict[core.Fact, UUID] = {
+            fact_to_stored_fact_id: dict[ast.Fact[ast.Ordinal], UUID] = {
                 stored_fact.as_fact: stored_fact.id
                 for stored_fact in stored_facts
             }
@@ -118,29 +132,37 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
     def _remove_previous_values(
         self,
-        facts: set[core.Fact],
+        facts: set[ast.Fact[ast.Ordinal]],
         tx_id: UUID,
     ):
-        cardinality_one_facts = [
-            fact for fact in facts if ATTRIBUTES[fact[1]].cardinality == "one"
-        ]
+        cardinality_one_facts: dict[tuple[str, str], t.Type[ast.Ordinal]] = {}
+        for entity, attr, _ in facts:
+            attribute = ATTRIBUTES[attr]
+            if attribute.cardinality == "one":
+                cardinality_one_facts[(entity, attr)] = attribute.data_type
+
         facts_to_remove = set(
             chain(
                 *(
-                    self._lookup(core.Clause(entity, attr, core.Any))
-                    for entity, attr, _ in cardinality_one_facts
+                    self._lookup(
+                        core.Clause(entity, attr, ast.TypedAny(data_type))
+                    )
+                    for (
+                        entity,
+                        attr,
+                    ), data_type in cardinality_one_facts.items()
                 )
             )
         )
         if facts_to_remove:
             self.bulk_remove(facts_to_remove, tx_id=tx_id)
 
-    def remove(self, fact: core.Fact):
+    def remove(self, fact: ast.Fact[ast.Ordinal]):
         """Removes a fact form the knowledge base"""
         self.bulk_remove({fact})
 
     def bulk_remove(
-        self, facts: set[core.Fact], tx_id: t.Optional[UUID] = None
+        self, facts: set[ast.Fact[ast.Ordinal]], tx_id: t.Optional[UUID] = None
     ):
         tx_id = tx_id or Transaction.new().id
 
@@ -154,7 +176,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
         q = models.Q()
         while facts:
-            next_facts: set[core.Fact] = set()
+            next_facts: set[ast.Fact[ast.Ordinal]] = set()
             for fact, rule_id, bases in core.run_rules_matching(
                 facts, INFERENCE_RULES, self._lookup
             ):
@@ -191,7 +213,9 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         """Solves the `query` and returns all Solutions so you can inspect from
         which facts those solutions are derived from
         """
-        return core.Query.from_tuples(query).solve(self._as_of(as_of)._lookup)
+        return core.Query.from_tuples(query, ATTRIBUTES).solve(
+            self._as_of(as_of)._lookup
+        )
 
     def refresh_inference(self):
         """Runs all the settings.TRIPLETS_INFERENCE_RULES configured agains the
@@ -208,18 +232,34 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             tx.id, list(core.refresh_rules(INFERENCE_RULES, self._lookup))
         )
 
-    def _lookup(self, predicate: core.Clause) -> t.Iterable[core.Fact]:
+    def _lookup(
+        self, predicate: core.Clause[ast.TOrdinal]
+    ) -> t.Iterable[ast.Fact[ast.TOrdinal]]:
         "This is used by the core engine to lookup predicates in the database"
-        query: dict[str, str | set[str]] = {}
-        for name, value in predicate.as_dict.items():
-            match value:
-                case core.Ordinal(value):
-                    query[name] = value
-                case core.In(_, values):
-                    query[f"{name}__in"] = values
-                case core.AnyType() | core.Var():
-                    ...
-        return self.filter(**query).values_list("subject", "verb", "obj")
+        query: dict[str, t.Any] = {
+            "verb": predicate.verb,
+        }
+        match predicate.subject:
+            case str():
+                query["subject"] = predicate.subject
+            case ast.TypedIn(_, values):
+                query["subject__in"] = values
+            case ast.TypedAny() | ast.TypedVar():
+                ...
+
+        match predicate.obj:
+            case int(value) | str(value):
+                suffix = Fact.type_name(type(predicate.obj))
+                query[f"subject_{suffix}"] = value
+            case ast.TypedIn(_, values, data_type):
+                suffix = Fact.type_name(data_type)
+                query[f"subject_{suffix}__in"] = values
+            case ast.TypedAny(data_type) | ast.TypedVar(_, data_type):
+                suffix = Fact.type_name(data_type)
+
+        return self.filter(**query).values_list(
+            "subject", "verb", f"obj_{suffix}"
+        )
 
     def _as_of_now(self) -> "StoredFactQS":
         return self.filter(removed__isnull=True)
@@ -267,7 +307,9 @@ class Transaction(models.Model):
         ordering = ["id"]
 
     @property
-    def mutations(self) -> t.Iterable[tuple[t.Literal["+", "-"], core.Fact]]:
+    def mutations(
+        self,
+    ) -> t.Iterable[tuple[t.Literal["+", "-"], ast.Fact[ast.Ordinal]]]:
         for added in StoredFact.objects.filter(added_id=self.id):
             yield "+", added.as_fact
         for removed in StoredFact.objects.filter(removed_id=self.id):
@@ -295,7 +337,17 @@ class StoredFact(models.Model):
 
     subject: models.CharField[str, str] = models.CharField(max_length=64)
     verb: models.CharField[str, str] = models.CharField(max_length=64)
-    obj: models.CharField[str, str] = models.CharField(max_length=64)
+
+    obj_str: models.CharField[str, str] = models.CharField(max_length=64)
+    obj_int: models.IntegerField[int, int] = models.IntegerField()
+
+    @property
+    def obj(self) -> ast.Ordinal:
+        if self.obj_str is not None:
+            return self.obj_str
+        elif self.obj_int is not None:
+            return self.obj_int
+        raise ValueError("This fact has no value at all!")
 
     # flag active when this rule was derived
     is_inferred: models.BooleanField[bool, bool] = models.BooleanField()
@@ -320,23 +372,28 @@ class StoredFact(models.Model):
     objects: StoredFactQS = StoredFactQS.as_manager()  # type: ignore
 
     class Meta:  # type: ignore
-        unique_together = [["subject", "verb", "obj", "removed"]]
+        unique_together = [
+            ["subject", "verb", "obj_str", "removed"],
+            ["subject", "verb", "obj_int", "removed"],
+        ]
         indexes = [
             # used to delete InferredSolutions
-            models.Index(fields=["subject", "verb", "obj"]),
+            models.Index(fields=["subject", "verb", "obj_str"]),
+            models.Index(fields=["subject", "verb", "obj_int"]),
             # use for as_of
             models.Index(fields=["added", "removed"]),
             # used for lookup
             models.Index(fields=["verb"]),
             models.Index(fields=["subject", "verb"]),
-            models.Index(fields=["verb", "obj"]),
+            models.Index(fields=["verb", "obj_str"]),
+            models.Index(fields=["verb", "obj_int"]),
         ]
 
     def __str__(self):
         return f"{self.subject} -({self.verb})-> {self.obj}"
 
     @property
-    def as_fact(self) -> core.Fact:
+    def as_fact(self) -> ast.Fact[ast.Ordinal]:
         return (self.subject, self.verb, self.obj)
 
 

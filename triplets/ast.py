@@ -1,9 +1,25 @@
 import typing as t
 from dataclasses import dataclass
 
-from .bases import Context, Ordinal, TOrdinal, pluck_values
+Entity = str
+Ordinal = str | int
 
-# Untyped for user interface
+T = t.TypeVar("T")
+TOrdinal = t.TypeVar("TOrdinal", bound=Ordinal)
+
+Fact = tuple[str, str, TOrdinal]
+
+Context = dict[str, Ordinal]
+
+
+def pluck_values(
+    contexts: t.Sequence[Context], name: str, data_type: type[T]
+) -> set[T]:
+    return {
+        value
+        for ctx in contexts
+        if isinstance((value := ctx.get(name)), data_type)
+    }
 
 
 @dataclass(slots=True)
@@ -12,6 +28,10 @@ class Attr:
     data_type: type[Ordinal]
     cardinality: t.Literal["one", "many"]
 
+    @staticmethod
+    def as_dict(*attrs: "Attr") -> "AttrDict":
+        return {a.name: a for a in attrs}
+
 
 AttrDict = dict[str, Attr]
 
@@ -19,6 +39,12 @@ AttrDict = dict[str, Attr]
 @dataclass(slots=True)
 class Var:
     name: str
+
+
+@dataclass(slots=True)
+class In:
+    name: str
+    value: set[Ordinal]
 
 
 class AnyType:
@@ -48,21 +74,32 @@ class TypedAny(t.Generic[TOrdinal]):
     data_type: t.Type[TOrdinal]
 
 
-EntityExpression = AnyType | Var | str
-ValueExpression = AnyType | Var | Ordinal
+EntityExpression = AnyType | Var | In | str
+ValueExpression = AnyType | Var | In | Ordinal
 TypedExpression: t.TypeAlias = (
     TypedAny[TOrdinal] | TypedVar[TOrdinal] | TypedIn[TOrdinal] | TOrdinal
 )
+
+
+def all_are(values: set[t.Any], ty: t.Type[T]) -> t.TypeGuard[set[T]]:
+    return all(isinstance(v, ty) for v in values)
 
 
 def typed_from_entity(exp: EntityExpression) -> TypedExpression[str]:
     match exp:
         case str():
             return exp
-        case AnyType():
-            return TypedAny(str)
+        case In(name, values):
+            if all_are(values, str):
+                return TypedIn(name, values, str)
+            else:
+                raise TypeError(
+                    f"Entity values should be strings, got: {values}"
+                )
         case Var(name):
             return TypedVar(name, str)
+        case AnyType():
+            return TypedAny(str)
 
 
 def typed_from_value(
@@ -73,14 +110,16 @@ def typed_from_value(
             return TypedVar(name, attribute.data_type)
         case AnyType():
             return TypedAny(attribute.data_type)
-        case _:
-            if isinstance(exp, attribute.data_type):
-                return exp
+        case In(name, values):
+            if all_are(values, attribute.data_type):
+                return TypedIn(name, values, attribute.data_type)
             else:
                 raise TypeError(
-                    f"Attribute {attribute.name} type is "
-                    f"{attribute.data_type}, can't have value: {exp}"
+                    f"Exp {exp} does not have values of type "
+                    f"{attribute.data_type}"
                 )
+        case str(value) | int(value):
+            return value
 
 
 def expression_type(exp: TypedExpression[TOrdinal]) -> t.Type[Ordinal]:
