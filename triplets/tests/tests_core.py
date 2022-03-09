@@ -216,7 +216,7 @@ class TestRule(TestCase):
         Attr("color", str, "many"),
     )
 
-    def test_checks_that_is_not_missing_any_variables(self):
+    def test_checks_that_is_not_missing_any_variables_with_predicate(self):
         with self.assertRaises(TypeError) as e:
             rule(
                 self.attributes,
@@ -228,7 +228,78 @@ class TestRule(TestCase):
             )
         self.assertEqual(
             str(e.exception),
-            "Rule: [((person: str), age, (age: int in {1, 2})), ((person: str), color, (*: str))] => [((parent: str), color, blue)] is missing {'parent'} in the predicate",
+            "\n".join(
+                [
+                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?parent: str, color, blue)]:",
+                    " - Variable `?parent: <class 'str'>` is missing in the predicate",
+                ]
+            ),
+        )
+
+    def test_checks_that_for_type_missmatch_with_predicate(self):
+        with self.assertRaises(TypeError) as e:
+            rule(
+                self.attributes,
+                [
+                    (Var("person"), "age", In("age", {1, 2})),
+                    (Var("person"), "color", Any),
+                ],
+                implies=[(Var("person"), "color", Var("age"))],
+            )
+        self.assertEqual(
+            str(e.exception),
+            "\n".join(
+                [
+                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
+                    " - Type mismatch in variable `?age`, got <class 'int'>, requires: <class 'str'>",
+                ]
+            ),
+        )
+
+    def test_checks_that_for_type_missmatch_with_function(self):
+        with self.assertRaises(TypeError) as e:
+
+            def implies(parent: str, color: int):
+                return [(parent, "color", color)]
+
+            rule(
+                self.attributes,
+                [
+                    (Var("person"), "age", In("age", {1, 2})),
+                    (Var("person"), "color", Var("color")),
+                ],
+                implies=implies,
+            )
+        self.assertEqual(
+            str(e.exception),
+            "\n".join(
+                [
+                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?color: str)] => f(parent: str, color: int):",
+                    " - Variable `?parent: <class 'str'>` is missing in the predicate",
+                    " - Type mismatch in variable `?color`, got <class 'str'>, requires: <class 'int'>",
+                ]
+            ),
+        )
+
+    def test_checks_that_is_not_missing_any_variables_with_functions(self):
+        with self.assertRaises(TypeError) as e:
+
+            rule(
+                self.attributes,
+                [
+                    (Var("person"), "age", In("age", {1, 2})),
+                    (Var("person"), "color", Any),
+                ],
+                implies=lambda parent: [(parent, "color", "blue")],
+            )
+        self.assertEqual(
+            str(e.exception),
+            "\n".join(
+                [
+                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => f(parent):",
+                    " - Variable `?parent: None` is missing in the predicate",
+                ]
+            ),
         )
 
     def test_checks_that_has_not_any_in_the_conclusions(self):
@@ -243,5 +314,10 @@ class TestRule(TestCase):
             )
         self.assertEqual(
             str(e.exception),
-            "Rule: [((person: str), age, (age: int in {1, 2})), ((person: str), color, blue)] => [((*: str), color, blue)] can't have `Any` in it's complications",
+            "\n".join(
+                [
+                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, blue)] => [(?: str, color, blue)]:",
+                    " - Implications can't have `?` in them",
+                ]
+            ),
         )

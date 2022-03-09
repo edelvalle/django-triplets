@@ -3,6 +3,12 @@ from dataclasses import dataclass
 
 Entity = str
 Ordinal = str | int
+OrdinalTypes = (str, int)
+
+
+def type_name(ty: type) -> str:
+    return getattr(ty, "__name__", str(ty))
+
 
 T = t.TypeVar("T")
 
@@ -59,27 +65,27 @@ Any = AnyType()
 class TypedIn:
     name: str
     values: set[Ordinal]
-    data_type: t.Type[Ordinal]
+    data_type: type[Ordinal]
 
     def __repr__(self) -> str:
-        return f"({self.name}: {self.data_type.__name__} in {self.values})"
+        return f"?{self.name}: {self.data_type.__name__} in {self.values}"
 
 
 @dataclass(slots=True)
 class TypedVar:
     name: str
-    data_type: t.Type[Ordinal]
+    data_type: type[Ordinal]
 
     def __repr__(self) -> str:
-        return f"({self.name}: {self.data_type.__name__})"
+        return f"?{self.name}: {self.data_type.__name__}"
 
 
 @dataclass(slots=True)
 class TypedAny:
-    data_type: t.Type[Ordinal]
+    data_type: type[Ordinal]
 
     def __repr__(self) -> str:
-        return f"(*: {self.data_type.__name__})"
+        return f"?: {self.data_type.__name__}"
 
 
 EntityExpression = AnyType | Var | In | str
@@ -87,7 +93,7 @@ ValueExpression = AnyType | Var | In | Ordinal
 TypedExpression = TypedAny | TypedVar | TypedIn | Ordinal
 
 
-def all_are(values: set[t.Any], ty: t.Type[object]) -> bool:
+def all_are(values: set[t.Any], ty: type[object]) -> bool:
     return all(isinstance(v, ty) for v in values)
 
 

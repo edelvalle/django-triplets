@@ -17,6 +17,7 @@ attributes = Attr.as_dict(
     Attr("descendant_of", str, "many"),
     Attr("mom_of", str, "many"),
     Attr("dad_of", str, "many"),
+    Attr("age", int, "one"),
 )
 
 

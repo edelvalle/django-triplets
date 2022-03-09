@@ -39,20 +39,13 @@ class Fact:
         return {
             "subject": subject,
             "verb": verb,
-            f"obj_{cls.type_name(type(obj))}": obj,
+            f"obj_{ast.type_name(type(obj))}": obj,
         }
 
     @classmethod
     def to_str(cls, fact: ast.Fact) -> str:
         entity, verb, value = fact
-        return f"fact:({entity},{verb},{cls.type_name(type(value))}:{value})"
-
-    @staticmethod
-    def type_name(ty: t.Type[ast.Ordinal]) -> str:
-        if ty == str:
-            return "str"
-        else:
-            return "int"
+        return f"fact:({entity},{verb},{ast.type_name(type(value))}:{value})"
 
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
@@ -139,7 +132,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         facts: set[ast.Fact],
         tx_id: UUID,
     ):
-        cardinality_one_facts: dict[tuple[str, str], t.Type[ast.Ordinal]] = {}
+        cardinality_one_facts: dict[tuple[str, str], type[ast.Ordinal]] = {}
         for entity, attr, _ in facts:
             attribute = ATTRIBUTES[attr]
             if attribute.cardinality == "one":
@@ -254,17 +247,17 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
         match predicate.obj:
             case int(value) | str(value):
-                suffix = Fact.type_name(type(predicate.obj))
+                suffix = ast.type_name(type(predicate.obj))
                 query[f"obj_{suffix}"] = value
             case ast.TypedIn(_, values, data_type):
                 if values:
-                    suffix = Fact.type_name(data_type)
+                    suffix = ast.type_name(data_type)
                     query[f"obj_{suffix}__in"] = values
                 else:
                     # this is looking for nothing, so is safe to abort here
                     return []
             case ast.TypedAny(data_type) | ast.TypedVar(_, data_type):
-                suffix = Fact.type_name(data_type)
+                suffix = ast.type_name(data_type)
 
         return self.filter(**query).values_list(
             "subject", "verb", f"obj_{suffix}"
