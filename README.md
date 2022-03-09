@@ -22,12 +22,45 @@ INSTALLED_APPS = [
 ]
 ```
 
-The configuration options are:
+The configuration options goes like:
 
 ```python
-# use the helper `triplets.rule` to create rules
-TRIPLETS_INFERENCE_RULES: list[fact.Rule] = []
+from triplets import Attr, Var compile_rules
+
+
+TRIPLETS_ATTRIBUTES: dict[str, Attr] = Attr.as_dict(
+    Attr("color", str, "many"),
+    Attr("age", int, "one"),
+    Attr("age_stage", int, "one"),
+    Attr("child_of", str, "many"),
+    Attr("descendant_of", str, "many"),
+)
+
+
+class DescendentOfDirectParent:
+    predicate = [(Var("child"), "child_of", Var("parent"))]
+    implies = [(Var("child"), "descendant_of", Var("parent"))]
+
+
+class DescendantOfRecursive:
+    predicate = [
+        (Var("grandchild"), "descendant_of", Var("parent")),
+        (Var("parent"), "descendant_of", Var("grandparent")),
+    ]
+    implies = [(Var("grandchild"), "descendant_of", Var("grandparent"))]
+
+
+
+TRIPLETS_INFERENCE_RULES: list[fact.Rule] = compile_rules(
+    TRIPLETS_ATTRIBUTES,
+    DescendentOfDirectParent,
+    DescendantOfRecursive,
+)
 ```
+
+- `TRIPLETS_ATTRIBUTES` is required because it specifies the attributes type
+  and cardinality.
+- `TRIPLETS_INFERENCE_RULES` is how you specify inference rules.
 
 ## Usage
 
@@ -37,6 +70,10 @@ Given a Knowledge Base where each Fact is represented as a Triplate in the form
 `Fact(subject, verb, object)`, you can represent things like:
 
 ```python
+TRIPLETS_ATTRIBUTES: dict[str, Attr] = Attr.as_dict(
+    Attr("located_in", str, "one"),
+)
+
 facts = [
     # germany facts
     ("mitte", "located_in", "berlin"),
@@ -156,16 +193,36 @@ First configure your inference rules in the `settings.py` file:
 ```python
 from triplets import Var, rule
 
-TRIPLETS_INFERENCE_RULES = [
-    rule(
-        [(Var("X"), "located_in", Var("Y"))],
-        implies=[(Var("X"), "part_of", Var("Y"))]
-    ),
-    rule(
-        [(Var("X"), "part_of", Var("Y")), (Var("Y"), "part_of", Var("Z"))],
-        implies=[(Var("X"), "part_of", Var("Z"))]
-    )
-]
+
+TRIPLETS_ATTRIBUTES: dict[str, Attr] = Attr.as_dict(
+    Attr("located_in", str, "one"),
+    Attr("part_of", str, "many"),
+)
+
+
+class PartOfByDirectedLocatedIn:
+    predicate = [(Var("X"), "located_in", Var("Y"))]
+    implies = [(Var("X"), "part_of", Var("Y"))]
+
+
+class PartOfRecursive:
+    predicate = [
+        (Var("X"), "part_of", Var("Y")),
+        (Var("Y"), "part_of", Var("Z")),
+    ]
+
+    # you can specify the implication as a static function
+    # not necessary in this case but just to illustrate.
+    @staticmethod
+    def implies(X: str, Z: str):
+        return [(X, "part_of", Z)]
+
+
+TRIPLETS_INFERENCE_RULES = compile_rules(
+    TRIPLETS_ATTRIBUTES,
+    PartOfByDirectedLocatedIn,
+    PartOfRecursive,
+)
 ```
 
 After changing the inference rules, you need to run at least one of these:
@@ -261,22 +318,22 @@ That's it!
 
 ## TODO
 
-- Test integer values
 - Rename subject -> entity
-         verb -> attr
-         obj -> value
+  verb -> attr
+  obj -> value
 
 - Add different kinds of operators to constrain a query
-    - Make sure all expressions make sense with the type
-    - Unify all variable constrains:
-        If somewhere a variable says x > 1 and somewhere x < 5, that compiles everywhere to 1 < x < 5
-        Keep in mind that some variables will be in operations to other variables like in the case:
-            (LittelBrother, age, LBAge)
-            (BigBrother, age, LBAge < LGAge) =>
-            (LittleBrother, is_little_brother_of, BigBrother)
-        In this case the variables most be of the same type, and the second query can't be performed until
-        the first one is not cleared out
-        This case is hard to optimize for bulk operations, it will require a lookup per result in the first query.
 
-    - Find non-sense things like 5 > x < 1
-        - And respond that this is not valid and the response should be 0
+  - Make sure all expressions make sense with the type
+  - Unify all variable constrains:
+    If somewhere a variable says x > 1 and somewhere x < 5, that compiles everywhere to 1 < x < 5
+    Keep in mind that some variables will be in operations to other variables like in the case:
+    (LittelBrother, age, LBAge)
+    (BigBrother, age, LBAge < LGAge) =>
+    (LittleBrother, is_little_brother_of, BigBrother)
+    In this case the variables most be of the same type, and the second query can't be performed until
+    the first one is not cleared out
+    This case is hard to optimize for bulk operations, it will require a lookup per result in the first query.
+
+  - Find non-sense things like 5 > x < 1
+    - And respond that this is not valid and the response should be 0
