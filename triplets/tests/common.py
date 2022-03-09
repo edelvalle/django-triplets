@@ -16,6 +16,7 @@ attributes = Attr.as_dict(
     Attr("mom_of", str, "many"),
     Attr("dad_of", str, "many"),
     Attr("age", int, "one"),
+    Attr("age_stage", str, "one"),
 )
 
 
@@ -53,7 +54,7 @@ class MomOf:
     implies = [(Var("parent"), "mom_of", Var("child"))]
 
 
-parent_role_rules = compile_rules(attributes, [DadOf, MomOf])
+parent_role_rules = compile_rules(attributes, DadOf, MomOf)
 
 
 class SiblingOf:
@@ -64,7 +65,7 @@ class SiblingOf:
     implies = [(Var("child1"), "sibling_of", Var("child2"))]
 
 
-siblings_rule = compile_rules(attributes, [SiblingOf])
+siblings_rule = compile_rules(attributes, SiblingOf)
 
 
 class SymmetricSibingOf:
@@ -78,7 +79,7 @@ class SymmetricSibingOf:
     ]
 
 
-symmetric_sibling_rule = compile_rules(attributes, [SiblingOf])
+symmetric_sibling_rule = compile_rules(attributes, SiblingOf)
 
 
 class DescendentOfDirectParent:
@@ -95,8 +96,19 @@ class DescendantOfRecursive:
 
 
 descendants_rules = compile_rules(
-    attributes, [DescendentOfDirectParent, DescendantOfRecursive]
+    attributes, DescendentOfDirectParent, DescendantOfRecursive
 )
+
+
+class AgeStage:
+    predicate = [(Var("person"), "age", Var("age"))]
+
+    @staticmethod
+    def implies(person: str, age: int):
+        yield (person, "age_stage", "minor" if age < 21 else "adult")
+
+
+age_stage_rules = compile_rules(attributes, AgeStage)
 
 
 class TestUsingDjango(TestCase):

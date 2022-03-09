@@ -227,7 +227,7 @@ class TestRule(TestCase):
 
                 implies = [(Var("parent"), "color", "blue")]
 
-            compile_rules(self.attributes, [TestRule])
+            compile_rules(self.attributes, TestRule)
 
         self.assertEqual(
             str(e.exception),
@@ -250,7 +250,7 @@ class TestRule(TestCase):
 
                 implies = [(Var("person"), "color", Var("age"))]
 
-            compile_rules(self.attributes, [TestRule])
+            compile_rules(self.attributes, TestRule)
 
         self.assertEqual(
             str(e.exception),
@@ -275,7 +275,7 @@ class TestRule(TestCase):
                 def implies(parent: str, color: int):
                     return [(parent, "color", color)]
 
-            compile_rules(self.attributes, [TestRule])
+            compile_rules(self.attributes, TestRule)
 
         self.assertEqual(
             str(e.exception),
@@ -301,7 +301,7 @@ class TestRule(TestCase):
                 def implies(parent):  # type: ignore
                     return [(parent, "color", "blue")]  # type: ignore
 
-            compile_rules(self.attributes, [TestRule])
+            compile_rules(self.attributes, TestRule)
 
         self.assertEqual(
             str(e.exception),
@@ -323,7 +323,7 @@ class TestRule(TestCase):
                 ]
                 implies = [(Any, "color", "blue")]
 
-            compile_rules(self.attributes, [TestRule])
+            compile_rules(self.attributes, TestRule)
 
         self.assertEqual(
             str(e.exception),

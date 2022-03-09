@@ -102,10 +102,12 @@ def typed_from_entity(exp: EntityExpression) -> TypedExpression:
         case str():
             return exp
         case In(name, values):
-            assert all_are(
-                values, str
-            ), f"Found values that are not string here: {values}"
-            return TypedIn(name, values, str)
+            if all_are(values, str):
+                return TypedIn(name, values, str)
+            else:
+                raise TypeError(
+                    f"Found entity values that are not str: {values}"
+                )
         case Var(name):
             return TypedVar(name, str)
         case AnyType():

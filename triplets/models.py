@@ -1,6 +1,5 @@
 import typing as t
 from datetime import datetime, timezone
-from itertools import chain
 from uuid import UUID
 
 from django.conf import settings
@@ -62,7 +61,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         This method has better performance than adding the facts one by one.
         """
         tx_id = tx_id or Transaction.new().id
-        self._remove_previous_values(set(facts), tx_id)
+        self._remove_previous_values(tx_id, set(facts))
         self._bulk_add(
             tx_id,
             [(fact, None, None) for fact in facts],
@@ -127,47 +126,36 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             )
         self._garbage_collect(tx_id)
 
-    def _remove_previous_values(
-        self,
-        facts: set[ast.Fact],
-        tx_id: UUID,
-    ):
-        cardinality_one_facts: dict[tuple[str, str], type[ast.Ordinal]] = {}
-        for entity, attr, _ in facts:
-            attribute = ATTRIBUTES[attr]
-            if attribute.cardinality == "one":
-                cardinality_one_facts[(entity, attr)] = attribute.data_type
-
-        facts_to_remove = set(
-            chain(
-                *(
-                    self._lookup(
-                        core.Clause(entity, attr, ast.TypedAny(data_type))
-                    )
-                    for (
-                        entity,
-                        attr,
-                    ), data_type in cardinality_one_facts.items()
-                )
-            )
-        )
-        if facts_to_remove:
-            self.bulk_remove(facts_to_remove, tx_id=tx_id)
+    def _remove_previous_values(self, tx_id: UUID, facts: set[ast.Fact]):
+        facts = {
+            fact for fact in facts if ATTRIBUTES[fact[1]].cardinality == "one"
+        }
+        if facts:
+            query = models.Q()
+            for entity, attr, _ in facts:
+                query |= models.Q(subject=entity, verb=attr)
+            self._bulk_remove(tx_id, query)
 
     def remove(self, fact: ast.Fact):
         """Removes a fact form the knowledge base"""
         self.bulk_remove({fact})
 
-    def bulk_remove(self, facts: set[ast.Fact], tx_id: t.Optional[UUID] = None):
-        tx_id = tx_id or Transaction.new().id
+    def bulk_remove(self, facts: set[ast.Fact]):
+        if facts:
+            tx = Transaction.new()
+            query = models.Q()
+            for fact in facts:
+                query |= models.Q(**Fact.as_dict(fact))
+            self._bulk_remove(tx.id, query)
 
-        q = models.Q()
-        for fact in facts:
-            q |= models.Q(**Fact.as_dict(fact))
-
-        stored_facts = self._is_inferred(False)._as_of_now().filter(q)
-        if stored_facts.count() != len(facts):
-            raise ValueError("You can't remove inferred facts")
+    def _bulk_remove(self, tx_id: UUID, query: models.Q):
+        stored_facts = self._as_of_now().filter(query)
+        facts: set[core.Fact] = set()
+        for fact in stored_facts:
+            if fact.is_inferred:
+                raise ValueError("You can't delete inferred facts")
+            else:
+                facts.add(fact.as_fact)
 
         q = models.Q()
         while facts:

@@ -189,7 +189,8 @@ class Predicate(t.Iterable[Clause]):
                 result[var_name] = types.pop()
             else:
                 raise TypeError(
-                    f"Variable `{var_name}` can't have more than one type, and it has: {[t.__name__ for t in types]}"
+                    f"Variable `{var_name}` can't have more than one type, and "
+                    f"it has: {[t.__name__ for t in types]}"
                 )
         return result
 
@@ -378,9 +379,7 @@ class RuleProtocol(t.Protocol):
     implies: PredicateTuples | Conclusions.Function
 
 
-def compile_rules(
-    attributes: AttrDict, rules: t.Sequence[RuleProtocol]
-) -> list[Rule]:
+def compile_rules(attributes: AttrDict, *rules: RuleProtocol) -> list[Rule]:
     return [
         Rule(
             Predicate.from_tuples(attributes, r.predicate),
