@@ -1,12 +1,11 @@
 from .ast import Any, Var
-from .core import Rule, rule
+from .core import compile_rules
 from .models import StoredFact
 
 __all__ = [
     "Any",
-    "Rule",
     "Var",
-    "rule",
+    "compile_rules",
     "add",
     "bulk_add",
     "remove",

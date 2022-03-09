@@ -1,14 +1,12 @@
 import typing as t
 from datetime import datetime
-from functools import partial
 from uuid import UUID
 
 from django.test import TestCase
 
 from .. import api, models
 from ..ast import Attr, Ordinal, Var
-from ..core import PredicateTuples, Rule
-from ..core import rule as rule_factory
+from ..core import PredicateTuples, Rule, compile_rules
 
 attributes = Attr.as_dict(
     Attr("gender", str, "one"),
@@ -39,61 +37,66 @@ triplets = [
 ]
 
 
-rule = partial(rule_factory, attributes)
+class DadOf:
+    predicate = [
+        (Var("child"), "child_of", Var("parent")),
+        (Var("parent"), "gender", "m"),
+    ]
+    implies = [(Var("parent"), "dad_of", Var("child"))]
 
 
-parent_role_rules = [
-    rule(
-        [
-            (Var("child"), "child_of", Var("parent")),
-            (Var("parent"), "gender", "m"),
-        ],
-        implies=[(Var("parent"), "dad_of", Var("child"))],
-    ),
-    rule(
-        [
-            (Var("child"), "child_of", Var("parent")),
-            (Var("parent"), "gender", "f"),
-        ],
-        implies=[(Var("parent"), "mom_of", Var("child"))],
-    ),
-]
+class MomOf:
+    predicate = [
+        (Var("child"), "child_of", Var("parent")),
+        (Var("parent"), "gender", "f"),
+    ]
+    implies = [(Var("parent"), "mom_of", Var("child"))]
 
 
-siblings_rule = rule(
-    [
+parent_role_rules = compile_rules(attributes, [DadOf, MomOf])
+
+
+class SiblingOf:
+    predicate = [
         (Var("child1"), "child_of", Var("parent")),
         (Var("child2"), "child_of", Var("parent")),
-    ],
-    implies=[(Var("child1"), "sibling_of", Var("child2"))],
-)
+    ]
+    implies = [(Var("child1"), "sibling_of", Var("child2"))]
 
-symmetric_sibling_rule = rule(
-    [
+
+siblings_rule = compile_rules(attributes, [SiblingOf])
+
+
+class SymmetricSibingOf:
+    predicate = [
         (Var("child1"), "child_of", Var("parent")),
         (Var("child2"), "child_of", Var("parent")),
-    ],
-    implies=[
+    ]
+    implies = [
         (Var("child1"), "sibling_of", Var("child2")),
         (Var("child2"), "sibling_of", Var("child1")),
-    ],
-)
+    ]
 
-descendants_rules = [
-    rule(
-        [
-            (Var("child"), "child_of", Var("parent")),
-        ],
-        implies=[(Var("child"), "descendant_of", Var("parent"))],
-    ),
-    rule(
-        [
-            (Var("grandchild"), "descendant_of", Var("parent")),
-            (Var("parent"), "descendant_of", Var("grandparent")),
-        ],
-        implies=[(Var("grandchild"), "descendant_of", Var("grandparent"))],
-    ),
-]
+
+symmetric_sibling_rule = compile_rules(attributes, [SiblingOf])
+
+
+class DescendentOfDirectParent:
+    predicate = [(Var("child"), "child_of", Var("parent"))]
+    implies = [(Var("child"), "descendant_of", Var("parent"))]
+
+
+class DescendantOfRecursive:
+    predicate = [
+        (Var("grandchild"), "descendant_of", Var("parent")),
+        (Var("parent"), "descendant_of", Var("grandparent")),
+    ]
+    implies = [(Var("grandchild"), "descendant_of", Var("grandparent"))]
+
+
+descendants_rules = compile_rules(
+    attributes, [DescendentOfDirectParent, DescendantOfRecursive]
+)
 
 
 class TestUsingDjango(TestCase):

@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from ..ast import Any, Attr, In, TypedAny, TypedIn, TypedVar, Var
-from ..core import Clause, Predicate, rule, substitute_using
+from ..core import Clause, Predicate, compile_rules, substitute_using
 
 
 class TestExpressions(TestCase):
@@ -218,14 +218,17 @@ class TestRule(TestCase):
 
     def test_checks_that_is_not_missing_any_variables_with_predicate(self):
         with self.assertRaises(TypeError) as e:
-            rule(
-                self.attributes,
-                [
+
+            class TestRule:
+                predicate = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Any),
-                ],
-                implies=[(Var("parent"), "color", "blue")],
-            )
+                ]
+
+                implies = [(Var("parent"), "color", "blue")]
+
+            compile_rules(self.attributes, [TestRule])
+
         self.assertEqual(
             str(e.exception),
             "\n".join(
@@ -238,14 +241,17 @@ class TestRule(TestCase):
 
     def test_checks_that_for_type_missmatch_with_predicate(self):
         with self.assertRaises(TypeError) as e:
-            rule(
-                self.attributes,
-                [
+
+            class TestRule:
+                predicate = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Any),
-                ],
-                implies=[(Var("person"), "color", Var("age"))],
-            )
+                ]
+
+                implies = [(Var("person"), "color", Var("age"))]
+
+            compile_rules(self.attributes, [TestRule])
+
         self.assertEqual(
             str(e.exception),
             "\n".join(
@@ -259,17 +265,18 @@ class TestRule(TestCase):
     def test_checks_that_for_type_missmatch_with_function(self):
         with self.assertRaises(TypeError) as e:
 
-            def implies(parent: str, color: int):
-                return [(parent, "color", color)]
-
-            rule(
-                self.attributes,
-                [
+            class TestRule:
+                predicate = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Var("color")),
-                ],
-                implies=implies,
-            )
+                ]
+
+                @staticmethod
+                def implies(parent: str, color: int):
+                    return [(parent, "color", color)]
+
+            compile_rules(self.attributes, [TestRule])
+
         self.assertEqual(
             str(e.exception),
             "\n".join(
@@ -284,14 +291,18 @@ class TestRule(TestCase):
     def test_checks_that_is_not_missing_any_variables_with_functions(self):
         with self.assertRaises(TypeError) as e:
 
-            rule(
-                self.attributes,
-                [
+            class TestRule:
+                predicate = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Any),
-                ],
-                implies=lambda parent: [(parent, "color", "blue")],
-            )
+                ]
+
+                @staticmethod
+                def implies(parent):  # type: ignore
+                    return [(parent, "color", "blue")]  # type: ignore
+
+            compile_rules(self.attributes, [TestRule])
+
         self.assertEqual(
             str(e.exception),
             "\n".join(
@@ -304,14 +315,16 @@ class TestRule(TestCase):
 
     def test_checks_that_has_not_any_in_the_conclusions(self):
         with self.assertRaises(TypeError) as e:
-            rule(
-                self.attributes,
-                [
+
+            class TestRule:
+                predicate = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", "blue"),
-                ],
-                implies=[(Any, "color", "blue")],
-            )
+                ]
+                implies = [(Any, "color", "blue")]
+
+            compile_rules(self.attributes, [TestRule])
+
         self.assertEqual(
             str(e.exception),
             "\n".join(

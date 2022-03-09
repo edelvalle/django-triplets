@@ -1,8 +1,8 @@
-from .ast import Var
-from .core import Rule, rule
+from .ast import In, Var
+from .core import compile_rules
 
 __all__ = [
-    "Rule",
+    "In",
     "Var",
-    "rule",
+    "compile_rules",
 ]

@@ -312,7 +312,6 @@ class Conclusions:
 class Rule:
     predicate: Predicate
     conclusions: Conclusions
-    _validate_consistency: bool = field(default=True)
     _context: Context = field(default_factory=dict)
 
     @cached_property
@@ -323,35 +322,29 @@ class Rule:
         """
         return storage_hash(self.__repr__())
 
-    def __post_init__(self):
-        # check conclusions variables are satisfied by the predicate
-        if self._validate_consistency:
-            predicate_vars = self.predicate.variable_types
-
-            err_msgs: list[str] = []
-            for var_name, var_type in self.conclusions.variable_types:
-                if (
-                    predicate_var_type := predicate_vars.get(var_name)
-                ) is not None:
-                    if var_type is not None and not issubclass(
-                        var_type, predicate_var_type
-                    ):
-                        err_msgs.append(
-                            f"Type mismatch in variable `?{var_name}`, "
-                            f"got {predicate_var_type}, requires: {var_type}",
-                        )
-                else:
+    def validate(self) -> "Rule":
+        predicate_vars = self.predicate.variable_types
+        err_msgs: list[str] = []
+        for var_name, var_type in self.conclusions.variable_types:
+            if (predicate_var_type := predicate_vars.get(var_name)) is not None:
+                if var_type is not None and not issubclass(
+                    var_type, predicate_var_type
+                ):
                     err_msgs.append(
-                        f"Variable `?{var_name}: {var_type}` is missing in the predicate"
+                        f"Type mismatch in variable `?{var_name}`, "
+                        f"got {predicate_var_type}, requires: {var_type}",
                     )
-
-            if self.conclusions.has_any_type:
-                err_msgs.append(f"Implications can't have `?` in them")
-
-            if err_msgs:
-                raise TypeError(
-                    "\n - ".join([f"Error(s) in {self}:"] + err_msgs)
+            else:
+                err_msgs.append(
+                    f"Variable `?{var_name}: {var_type}` is missing in the predicate"
                 )
+
+        if self.conclusions.has_any_type:
+            err_msgs.append(f"Implications can't have `?` in them")
+
+        if err_msgs:
+            raise TypeError("\n - ".join([f"Error(s) in {self}:"] + err_msgs))
+        return self
 
     def __repr__(self) -> str:
         return f"Rule: {self.predicate} => {self.conclusions}"
@@ -366,7 +359,6 @@ class Rule:
                 self,
                 predicate=Predicate(list(predicate)),
                 conclusions=self.conclusions,
-                _validate_consistency=False,
                 _context=self._context | match.context,
             )
 
@@ -381,16 +373,21 @@ class Rule:
                 yield (fact, solution.derived_from)
 
 
-def rule(
-    attributes: AttrDict,
-    predicate: PredicateTuples,
-    *,
-    implies: PredicateTuples | Conclusions.Function,
-) -> Rule:
-    return Rule(
-        Predicate.from_tuples(attributes, predicate),
-        Conclusions.from_tuples(attributes, implies),
-    )
+class RuleProtocol(t.Protocol):
+    predicate: PredicateTuples
+    implies: PredicateTuples | Conclusions.Function
+
+
+def compile_rules(
+    attributes: AttrDict, rules: t.Sequence[RuleProtocol]
+) -> list[Rule]:
+    return [
+        Rule(
+            Predicate.from_tuples(attributes, r.predicate),
+            Conclusions.from_tuples(attributes, r.implies),
+        ).validate()
+        for r in rules
+    ]
 
 
 InferredFacts = t.Iterable[tuple[Fact, str, set[Fact]]]
