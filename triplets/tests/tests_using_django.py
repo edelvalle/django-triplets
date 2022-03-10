@@ -23,7 +23,7 @@ class TestDjango(common.TestUsingDjango):
                 },
             )
 
-    def test_solving_single_query_with_subject_variables(self):
+    def test_solving_single_query_with_entity_variables(self):
         query = [(Var("child"), "child_of", "father")]
         with self.assertNumQueries(1):
             self.assertSetEqual(
@@ -34,7 +34,7 @@ class TestDjango(common.TestUsingDjango):
                 },
             )
 
-    def test_solving_single_query_with_object_variables(self):
+    def test_solving_single_query_with_value_variables(self):
         query = [("brother", "child_of", Var("parent"))]
         with self.assertNumQueries(1):
             self.assertSetEqual(

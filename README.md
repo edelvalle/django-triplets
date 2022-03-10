@@ -67,7 +67,7 @@ TRIPLETS_INFERENCE_RULES: list[fact.Rule] = compile_rules(
 Do you remember Prolog? or Datalog? Well, this is kind of that.
 
 Given a Knowledge Base where each Fact is represented as a Triplate in the form
-`Fact(subject, verb, object)`, you can represent things like:
+`Fact(entity, attr, value)`, you can represent things like:
 
 ```python
 TRIPLETS_ATTRIBUTES: dict[str, Attr] = Attr.as_dict(
@@ -95,8 +95,8 @@ facts = [
 ]
 ```
 
-This set of `facts` represents a directed graph where the verbs are the edges
-and subjects/objects the nodes?.
+This set of `facts` represents a directed graph where the attributes are the
+edges that relate entities and values.
 
 You can store this in the database by doing:
 
@@ -308,7 +308,7 @@ That's it!
   the logic that can be reused for any database as backend system.
 - Answers to queries are not in any particular order, they are given as found in
   the database.
-- The verb in a Predicate is always a string, it can't be a variable.
+- The attr in a Predicate is always a string, it can't be a variable.
 - Adding or Removing Facts is heavy when you have inference rules in place.
 - In case you want to add many facts you can reduce the amount of work the
   engine has to do by using `triplets.api.bulk_add(t.Sequence[core.Fact])`.
@@ -317,10 +317,6 @@ That's it!
   `triplets.api.explain_solutions()`.
 
 ## TODO
-
-- Rename subject -> entity
-  verb -> attr
-  obj -> value
 
 - Add different kinds of operators to constrain a query
 

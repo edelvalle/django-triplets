@@ -34,17 +34,17 @@ class Fact:
 
     @classmethod
     def as_dict(cls, fact: ast.Fact) -> ast.Context:
-        subject, verb, obj = fact
+        entity, attr, value = fact
         return {
-            "subject": subject,
-            "verb": verb,
-            f"obj_{ast.type_name(type(obj))}": obj,
+            "entity": entity,
+            "attr": attr,
+            f"value_{ast.type_name(type(value))}": value,
         }
 
     @classmethod
     def to_str(cls, fact: ast.Fact) -> str:
-        entity, verb, value = fact
-        return f"fact:({entity},{verb},{ast.type_name(type(value))}:{value})"
+        entity, attr, value = fact
+        return f"fact:({entity},{attr},{ast.type_name(type(value))}:{value})"
 
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
@@ -133,7 +133,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         if facts:
             query = models.Q()
             for entity, attr, _ in facts:
-                query |= models.Q(subject=entity, verb=attr)
+                query |= models.Q(entity=entity, attr=attr)
             self._bulk_remove(tx_id, query)
 
     def remove(self, fact: ast.Fact):
@@ -218,29 +218,29 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
     def _lookup(self, predicate: core.Clause) -> t.Iterable[ast.Fact]:
         "This is used by the core engine to lookup predicates in the database"
         query: dict[str, t.Any] = {
-            "verb": predicate.verb,
+            "attr": predicate.attr,
         }
-        match predicate.subject:
+        match predicate.entity:
             case str():
-                query["subject"] = predicate.subject
+                query["entity"] = predicate.entity
             case ast.TypedIn(_, values):
-                query["subject__in"] = values
+                query["entity__in"] = values
             case ast.TypedAny() | ast.TypedVar():
                 ...
             case int():
                 raise TypeError(
-                    f"I was not expecting this type {type(predicate.subject)}: "
-                    f"{predicate.subject} here"
+                    f"I was not expecting this type {type(predicate.entity)}: "
+                    f"{predicate.entity} here"
                 )
 
-        match predicate.obj:
+        match predicate.value:
             case int(value) | str(value):
-                suffix = ast.type_name(type(predicate.obj))
-                query[f"obj_{suffix}"] = value
+                suffix = ast.type_name(type(value))
+                query[f"value_{suffix}"] = value
             case ast.TypedIn(_, values, data_type):
                 if values:
                     suffix = ast.type_name(data_type)
-                    query[f"obj_{suffix}__in"] = values
+                    query[f"value_{suffix}__in"] = values
                 else:
                     # this is looking for nothing, so is safe to abort here
                     return []
@@ -248,7 +248,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 suffix = ast.type_name(data_type)
 
         return self.filter(**query).values_list(
-            "subject", "verb", f"obj_{suffix}"
+            "entity", "attr", f"value_{suffix}"
         )
 
     def _as_of_now(self) -> "StoredFactQS":
@@ -325,20 +325,20 @@ class StoredFact(models.Model):
         primary_key=True, default=uuid7
     )
 
-    subject: models.CharField[str, str] = models.CharField(max_length=64)
-    verb: models.CharField[str, str] = models.CharField(max_length=64)
+    entity: models.CharField[str, str] = models.CharField(max_length=64)
+    attr: models.CharField[str, str] = models.CharField(max_length=64)
 
-    obj_str: models.CharField[str, str] = models.CharField(
+    value_str: models.CharField[str, str] = models.CharField(
         max_length=64, null=True
     )
-    obj_int: models.IntegerField[int, int] = models.IntegerField(null=True)
+    value_int: models.IntegerField[int, int] = models.IntegerField(null=True)
 
     @property
-    def obj(self) -> ast.Ordinal:
-        if self.obj_str is not None:
-            return self.obj_str
-        elif self.obj_int is not None:
-            return self.obj_int
+    def value(self) -> ast.Ordinal:
+        if self.value_str is not None:
+            return self.value_str
+        elif self.value_int is not None:
+            return self.value_int
         raise ValueError("This fact has no value at all!")
 
     # flag active when this rule was derived
@@ -365,27 +365,27 @@ class StoredFact(models.Model):
 
     class Meta:  # type: ignore
         unique_together = [
-            ["subject", "verb", "obj_str", "obj_int", "removed"],
+            ["entity", "attr", "value_str", "value_int", "removed"],
         ]
         indexes = [
             # used to delete InferredSolutions
-            models.Index(fields=["subject", "verb", "obj_str"]),
-            models.Index(fields=["subject", "verb", "obj_int"]),
+            models.Index(fields=["entity", "attr", "value_str"]),
+            models.Index(fields=["entity", "attr", "value_int"]),
             # use for as_of
             models.Index(fields=["added", "removed"]),
             # used for lookup
-            models.Index(fields=["verb"]),
-            models.Index(fields=["subject", "verb"]),
-            models.Index(fields=["verb", "obj_str"]),
-            models.Index(fields=["verb", "obj_int"]),
+            models.Index(fields=["attr"]),
+            models.Index(fields=["entity", "attr"]),
+            models.Index(fields=["attr", "value_str"]),
+            models.Index(fields=["attr", "value_int"]),
         ]
 
     def __str__(self):
-        return f"{self.subject} -({self.verb})-> {self.obj}"
+        return f"{self.entity} -({self.attr})-> {self.value}"
 
     @property
     def as_fact(self) -> ast.Fact:
-        return (self.subject, self.verb, self.obj)
+        return (self.entity, self.attr, self.value)
 
 
 class InferredSolution(models.Model):

@@ -68,9 +68,9 @@ PredicateTuples = t.Sequence[ClauseTuple]
 
 @dataclass(frozen=True)
 class Clause:
-    subject: TypedExpression
-    verb: str
-    obj: TypedExpression
+    entity: TypedExpression
+    attr: str
+    value: TypedExpression
 
     @classmethod
     def from_tuple(
@@ -86,7 +86,7 @@ class Clause:
         )
 
     def __repr__(self) -> str:
-        return f"({self.subject}, {self.verb}, {self.obj})"
+        return f"({self.entity}, {self.attr}, {self.value})"
 
     def substitute_using(self, contexts: list[Context]):
         """Replaces variables in this predicate with their values form the
@@ -96,9 +96,11 @@ class Clause:
         if not contexts:
             return self
 
-        new_subject = substitute_using(self.subject, contexts)
-        new_obj = substitute_using(self.obj, contexts)
-        return replace(self, subject=new_subject, obj=new_obj)
+        return replace(
+            self,
+            entity=substitute_using(self.entity, contexts),
+            value=substitute_using(self.value, contexts),
+        )
 
     def __lt__(self, other: "Clause") -> bool:
         """This is here for the sorting protocol and query optimization"""
@@ -109,33 +111,33 @@ class Clause:
         """The more defined (literal values) this clause has, the lower
         the sorting number will be. So it gets priority when performing queries.
         """
-        return expression_weight(self.subject) + expression_weight(self.obj)
+        return expression_weight(self.entity) + expression_weight(self.value)
 
     @property
     def variable_types(self) -> defaultdict[str, set[type[Ordinal]]]:
         variable_types: defaultdict[str, set[type[Ordinal]]] = defaultdict(set)
-        if name := expression_var_name(self.subject):
-            variable_types[name].add(expression_type(self.subject))
-        if name := expression_var_name(self.obj):
-            variable_types[name].add(expression_type(self.obj))
+        if name := expression_var_name(self.entity):
+            variable_types[name].add(expression_type(self.entity))
+        if name := expression_var_name(self.value):
+            variable_types[name].add(expression_type(self.value))
         return variable_types
 
     @property
     def as_fact(self) -> t.Optional[Fact]:
-        if isinstance(self.subject, str) and isinstance(self.obj, Ordinal):
-            return (self.subject, self.verb, self.obj)
+        if isinstance(self.entity, str) and isinstance(self.value, Ordinal):
+            return (self.entity, self.attr, self.value)
         else:
             return None
 
     def matches(self, fact: Fact) -> t.Optional[Solution]:
-        subject, verb, obj = fact
-        if self.verb != verb:
+        entity, attr, value = fact
+        if self.attr != attr:
             return None
-        if (subject_match := expression_matches(self.subject, subject)) is None:
+        if (entity_match := expression_matches(self.entity, entity)) is None:
             return None
-        if (obj_match := expression_matches(self.obj, obj)) is None:
+        if (value_match := expression_matches(self.value, value)) is None:
             return None
-        return Solution(subject_match | obj_match, {fact})
+        return Solution(entity_match | value_match, {fact})
 
 
 VariableTypes = dict[str, type[Ordinal]]
@@ -274,7 +276,7 @@ class Conclusions:
     def has_any_type(self) -> bool:
         if isinstance(self.conclusions, Predicate):
             return any(
-                isinstance(c.subject, TypedAny) or isinstance(c.obj, TypedAny)
+                isinstance(c.entity, TypedAny) or isinstance(c.value, TypedAny)
                 for c in self.conclusions.clauses
             )
         else:

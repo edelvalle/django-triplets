@@ -164,22 +164,22 @@ class TestClause(TestCase):
             {"person": {str}, "parent": {str}},
         )
         self.assertDictEqual(
-            Clause("subject", "verb", "obj").variable_types,
+            Clause("entity", "attr", "value").variable_types,
             {},
         )
         self.assertDictEqual(
-            Clause(TypedVar("subject", str), "verb", "obj").variable_types,
-            {"subject": {str}},
+            Clause(TypedVar("entity", str), "attr", "value").variable_types,
+            {"entity": {str}},
         )
         self.assertDictEqual(
-            Clause("subject", "verb", TypedVar("obj", int)).variable_types,
-            {"obj": {int}},
+            Clause("entity", "attr", TypedVar("value", int)).variable_types,
+            {"value": {int}},
         )
         self.assertDictEqual(
             Clause(
-                TypedIn("subject", set(), str), "verb", TypedVar("obj", int)
+                TypedIn("entity", set(), str), "attr", TypedVar("value", int)
             ).variable_types,
-            {"subject": {str}, "obj": {int}},
+            {"entity": {str}, "value": {int}},
         )
 
 
