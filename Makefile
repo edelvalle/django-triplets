@@ -12,7 +12,7 @@ check:
 	pyright
 
 test:
-	cd tests; python manage.py test triplets
+	cd tests; python manage.py test triplets.tests$(TESTS)
 
 coverage:
 	cd tests; coverage run manage.py test triplets --keepdb; coverage report
