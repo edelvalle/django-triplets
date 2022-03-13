@@ -6,23 +6,13 @@ from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
 
-from .ast import (
-    AttrDict,
+from .ast import Any, AttrDict, LookUpExpression, Ordinal, VarTypes
+from .ast_untyped import (
+    ClauseTuple,
     Context,
-    EntityExpression,
     Fact,
-    Ordinal,
     OrdinalTypes,
-    TypedAny,
-    TypedExpression,
-    ValueExpression,
-    expression_matches,
-    expression_type,
-    expression_var_name,
-    expression_weight,
-    substitute_using,
-    typed_from_entity,
-    typed_from_value,
+    PredicateTuples,
 )
 
 
@@ -62,15 +52,11 @@ class Solution:
                 )
 
 
-ClauseTuple = tuple[EntityExpression, str, ValueExpression]
-PredicateTuples = t.Sequence[ClauseTuple]
-
-
 @dataclass(frozen=True)
 class Clause:
-    entity: TypedExpression
+    entity: LookUpExpression.T
     attr: str
-    value: TypedExpression
+    value: LookUpExpression.T
 
     @classmethod
     def from_tuple(
@@ -80,9 +66,9 @@ class Clause:
     ) -> "Clause":
         entity, attr, value = clause
         return cls(
-            typed_from_entity(entity),
+            LookUpExpression.from_entity_expression(entity),
             attr,
-            typed_from_value(value, attributes[attr]),
+            LookUpExpression.from_value_expression(value, attr, attributes),
         )
 
     def __repr__(self) -> str:
@@ -98,8 +84,8 @@ class Clause:
 
         return replace(
             self,
-            entity=substitute_using(self.entity, contexts),
-            value=substitute_using(self.value, contexts),
+            entity=LookUpExpression.substitute(self.entity, contexts),
+            value=LookUpExpression.substitute(self.value, contexts),
         )
 
     def __lt__(self, other: "Clause") -> bool:
@@ -111,15 +97,17 @@ class Clause:
         """The more defined (literal values) this clause has, the lower
         the sorting number will be. So it gets priority when performing queries.
         """
-        return expression_weight(self.entity) + expression_weight(self.value)
+        return LookUpExpression.weight(self.entity) + LookUpExpression.weight(
+            self.value
+        )
 
     @property
     def variable_types(self) -> defaultdict[str, set[type[Ordinal]]]:
         variable_types: defaultdict[str, set[type[Ordinal]]] = defaultdict(set)
-        if name := expression_var_name(self.entity):
-            variable_types[name].add(expression_type(self.entity))
-        if name := expression_var_name(self.value):
-            variable_types[name].add(expression_type(self.value))
+        if name := LookUpExpression.var_name(self.entity):
+            variable_types[name].add(LookUpExpression.ordinal_type(self.entity))
+        if name := LookUpExpression.var_name(self.value):
+            variable_types[name].add(LookUpExpression.ordinal_type(self.value))
         return variable_types
 
     @property
@@ -133,14 +121,13 @@ class Clause:
         entity, attr, value = fact
         if self.attr != attr:
             return None
-        if (entity_match := expression_matches(self.entity, entity)) is None:
+        if (
+            entity_match := LookUpExpression.matches(self.entity, entity)
+        ) is None:
             return None
-        if (value_match := expression_matches(self.value, value)) is None:
+        if (value_match := LookUpExpression.matches(self.value, value)) is None:
             return None
         return Solution(entity_match | value_match, {fact})
-
-
-VariableTypes = dict[str, type[Ordinal]]
 
 
 @dataclass(slots=True)
@@ -179,13 +166,13 @@ class Predicate(t.Iterable[Clause]):
         )
 
     @property
-    def variable_types(self) -> VariableTypes:
+    def variable_types(self) -> VarTypes:
         variable_types: defaultdict[str, set[type[Ordinal]]] = defaultdict(set)
         for clause in self.clauses:
             for name, types in clause.variable_types.items():
                 variable_types[name].update(types)
 
-        result: VariableTypes = {}
+        result: VarTypes = {}
         for var_name, types in variable_types.items():
             if len(types) == 1:
                 result[var_name] = types.pop()
@@ -276,7 +263,7 @@ class Conclusions:
     def has_any_type(self) -> bool:
         if isinstance(self.conclusions, Predicate):
             return any(
-                isinstance(c.entity, TypedAny) or isinstance(c.value, TypedAny)
+                isinstance(c.entity, Any) or isinstance(c.value, Any)
                 for c in self.conclusions.clauses
             )
         else:

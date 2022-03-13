@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from .. import api, models
-from ..ast import Var
+from ..api import Var
 from ..core import Solution
 from . import common
 

@@ -1,32 +1,37 @@
 from unittest import TestCase
 
-from ..ast import Any, Attr, In, TypedAny, TypedIn, TypedVar, Var
-from ..core import Clause, Predicate, compile_rules, substitute_using
+from .. import ast as typed
+from ..ast import Attr, LookUpExpression
+from ..ast_untyped import Any, In, Var
+from ..core import Clause, Predicate, compile_rules
 
 
 class TestExpressions(TestCase):
 
-    variable_expression = TypedVar("color", str)
-    in_expression = TypedIn("color", {"red"}, str)
+    variable_expression = typed.Var("color", str)
+    in_expression = typed.In("color", {"red"}, str)
 
     def test_can_substitute_using_a_single_context(self):
         self.assertEqual(
-            substitute_using(self.variable_expression, [{"color": "red"}]),
+            LookUpExpression.substitute(
+                self.variable_expression, [{"color": "red"}]
+            ),
             "red",
         )
         self.assertEqual(
-            substitute_using(self.in_expression, [{"color": "red"}]), "red"
+            LookUpExpression.substitute(self.in_expression, [{"color": "red"}]),
+            "red",
         )
 
     def test_can_substitute_using_multiple_contexts(self):
         self.assertEqual(
-            substitute_using(
+            LookUpExpression.substitute(
                 self.variable_expression, [{"color": "red"}, {"color": "blue"}]
             ),
-            TypedIn("color", {"red", "blue"}, str),
+            typed.In("color", {"red", "blue"}, str),
         )
         self.assertEqual(
-            substitute_using(
+            LookUpExpression.substitute(
                 self.in_expression, [{"color": "red"}, {"color": "blue"}]
             ),
             "red",
@@ -34,25 +39,27 @@ class TestExpressions(TestCase):
 
     def test_substitution_with_non_homogeneous_contexts(self):
         self.assertEqual(
-            substitute_using(
+            LookUpExpression.substitute(
                 self.variable_expression, [{"age": 12}, {"color": "blue"}]
             ),
-            "blue",
+            self.variable_expression,
         )
         self.assertEqual(
-            substitute_using(
+            LookUpExpression.substitute(
                 self.in_expression, [{"age": 12}, {"color": "blue"}]
             ),
-            TypedIn("color", set(), str),
+            self.in_expression,
         )
 
     def test_do_not_substitute_of_name_not_found_in_context(self):
         self.assertEqual(
-            substitute_using(self.variable_expression, [{"age": 12}]),
+            LookUpExpression.substitute(
+                self.variable_expression, [{"age": 12}]
+            ),
             self.variable_expression,
         )
         self.assertEqual(
-            substitute_using(self.in_expression, [{"age": 12}]),
+            LookUpExpression.substitute(self.in_expression, [{"age": 12}]),
             self.in_expression,
         )
 
@@ -70,11 +77,11 @@ class TestClause(TestCase):
         )
         self.assertEqual(
             clause.substitute_using([{"parent": "PARENT"}]),
-            Clause(TypedVar("person", str), "son_of", "PARENT"),
+            Clause(typed.Var("person", str), "son_of", "PARENT"),
         )
         self.assertEqual(
             clause.substitute_using([{"person": "PERSON"}]),
-            Clause("PERSON", "son_of", TypedVar("parent", str)),
+            Clause("PERSON", "son_of", typed.Var("parent", str)),
         )
         self.assertEqual(
             clause.substitute_using([{"unknown": "VALUE"}]),
@@ -88,16 +95,16 @@ class TestClause(TestCase):
         self.assertEqual(
             clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
             Clause(
-                TypedVar("person", str),
+                typed.Var("person", str),
                 "son_of",
-                TypedIn("parent", {"A", "B"}, str),
+                typed.In("parent", {"A", "B"}, str),
             ),
         )
         self.assertEqual(
             clause.substitute_using(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
-            Clause("P", "son_of", TypedIn("parent", {"A", "B"}, str)),
+            Clause("P", "son_of", typed.In("parent", {"A", "B"}, str)),
         )
         self.assertEqual(
             clause.substitute_using([{"unknown": "VALUE"}]),
@@ -110,13 +117,13 @@ class TestClause(TestCase):
         )
         self.assertEqual(
             clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
-            Clause(TypedVar("person", str), "son_of", TypedAny(str)),
+            Clause(typed.Var("person", str), "son_of", typed.Any(str)),
         )
         self.assertEqual(
             clause.substitute_using(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
-            Clause("P", "son_of", TypedAny(str)),
+            Clause("P", "son_of", typed.Any(str)),
         )
         self.assertEqual(
             clause.substitute_using([{"unknown": "VALUE"}]),
@@ -143,23 +150,25 @@ class TestClause(TestCase):
         self.assertListEqual(
             predicate.optimized_by([{}]),
             [
-                Clause(TypedIn("a", {"a"}, str), "b", TypedIn("c", set(), str)),
+                Clause(
+                    typed.In("a", {"a"}, str), "b", typed.In("c", set(), str)
+                ),
                 Clause("a", "b", "c"),
-                Clause("a", "b", TypedIn("c", {"a"}, str)),
-                Clause(TypedIn("a", {"a"}, str), "b", "c"),
-                Clause("a", "b", TypedVar("c", str)),
-                Clause(TypedVar("a", str), "b", "c"),
-                Clause(TypedIn("a", {"a"}, str), "b", TypedVar("c", str)),
-                Clause(TypedVar("a", str), "b", TypedIn("c", {"a"}, str)),
-                Clause(TypedVar("a", str), "b", TypedVar("c", str)),
-                Clause(TypedAny(str), "b", TypedIn("c", {"a"}, str)),
+                Clause("a", "b", typed.In("c", {"a"}, str)),
+                Clause(typed.In("a", {"a"}, str), "b", "c"),
+                Clause("a", "b", typed.Var("c", str)),
+                Clause(typed.Var("a", str), "b", "c"),
+                Clause(typed.In("a", {"a"}, str), "b", typed.Var("c", str)),
+                Clause(typed.Var("a", str), "b", typed.In("c", {"a"}, str)),
+                Clause(typed.Var("a", str), "b", typed.Var("c", str)),
+                Clause(typed.Any(str), "b", typed.In("c", {"a"}, str)),
             ],
         )
 
     def test_variable_names_returns_the_name_of_the_variables(self):
         self.assertDictEqual(
             Clause(
-                TypedVar("person", str), "son_of", TypedVar("parent", str)
+                typed.Var("person", str), "son_of", typed.Var("parent", str)
             ).variable_types,
             {"person": {str}, "parent": {str}},
         )
@@ -168,16 +177,16 @@ class TestClause(TestCase):
             {},
         )
         self.assertDictEqual(
-            Clause(TypedVar("entity", str), "attr", "value").variable_types,
+            Clause(typed.Var("entity", str), "attr", "value").variable_types,
             {"entity": {str}},
         )
         self.assertDictEqual(
-            Clause("entity", "attr", TypedVar("value", int)).variable_types,
+            Clause("entity", "attr", typed.Var("value", int)).variable_types,
             {"value": {int}},
         )
         self.assertDictEqual(
             Clause(
-                TypedIn("entity", set(), str), "attr", TypedVar("value", int)
+                typed.In("entity", set(), str), "attr", typed.Var("value", int)
             ).variable_types,
             {"entity": {str}, "value": {int}},
         )

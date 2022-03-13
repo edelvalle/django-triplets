@@ -1,30 +1,27 @@
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-Entity = str
-Ordinal = str | int
-OrdinalTypes = (str, int)
+from . import ast_untyped as untyped
+from .ast_untyped import Context, Ordinal, OrdinalType
+
+VarTypes = dict[str, OrdinalType]
 
 
 def type_name(ty: type) -> str:
     return getattr(ty, "__name__", str(ty))
 
 
-T = t.TypeVar("T")
-
-Fact = tuple[str, str, Ordinal]
-
-Context = dict[str, Ordinal]
-
-
 def pluck_values(
-    contexts: t.Sequence[Context], name: str, data_type: type[T]
-) -> set[T]:
-    return {
-        value
-        for ctx in contexts
-        if isinstance((value := ctx.get(name)), data_type)
-    }
+    contexts: t.Iterable[Context],
+    name: str,
+) -> set[Ordinal] | None:
+    values: set[Ordinal] = set()
+    for ctx in contexts:
+        if (value := ctx.get(name)) is None:
+            return None
+        else:
+            values.add(value)
+    return values
 
 
 @dataclass(slots=True)
@@ -41,28 +38,11 @@ class Attr:
 AttrDict = dict[str, Attr]
 
 
-@dataclass(slots=True)
-class Var:
-    name: str
-
-
-@dataclass(slots=True)
-class In:
-    name: str
-    value: set[Ordinal]
-
-
-class AnyType:
-    ...
-
-
-Any = AnyType()
-
 # Internally typed for library use
 
 
 @dataclass(slots=True)
-class TypedIn:
+class In:
     name: str
     values: set[Ordinal]
     data_type: type[Ordinal]
@@ -70,142 +50,151 @@ class TypedIn:
     def __repr__(self) -> str:
         return f"?{self.name}: {self.data_type.__name__} in {self.values}"
 
+    def substitute(
+        self, contexts: t.Iterable[Context]
+    ) -> t.Union["In", Ordinal]:
+        values = pluck_values(contexts, self.name)
+        if values is None:
+            # no values found means that the variable still not defined
+            return self
+        else:
+            values.intersection_update(self.values)
+            # just one value found means that this is now an Ordinal
+            if len(values) == 1:
+                # one found this is an Ordinal
+                return values.pop()
+            else:
+                # return the subset found
+                return replace(self, values=values)
+
 
 @dataclass(slots=True)
-class TypedVar:
+class Var:
     name: str
     data_type: type[Ordinal]
 
     def __repr__(self) -> str:
         return f"?{self.name}: {self.data_type.__name__}"
 
+    def substitute(
+        self, contexts: t.Iterable[Context]
+    ) -> t.Union[In, "Var", Ordinal]:
+        if (values := pluck_values(contexts, self.name)) is None:
+            # no values found means that the variable still not defined
+            return self
+        elif len(values) == 1:
+            # just one value found means that this is now an Ordinal
+            return values.pop()
+        else:
+            # a few values found means this is an In expression
+            return In(self.name, values, self.data_type)
+
 
 @dataclass(slots=True)
-class TypedAny:
+class Any:
     data_type: type[Ordinal]
 
     def __repr__(self) -> str:
         return f"?: {self.data_type.__name__}"
 
 
-EntityExpression = AnyType | Var | In | str
-ValueExpression = AnyType | Var | In | Ordinal
-TypedExpression = TypedAny | TypedVar | TypedIn | Ordinal
-
-
 def all_are(values: set[t.Any], ty: type[object]) -> bool:
     return all(isinstance(v, ty) for v in values)
 
 
-def typed_from_entity(exp: EntityExpression) -> TypedExpression:
-    match exp:
-        case str():
-            return exp
-        case In(name, values):
-            if all_are(values, str):
-                return TypedIn(name, values, str)
-            else:
-                raise TypeError(
-                    f"Found entity values that are not str: {values}"
-                )
-        case Var(name):
-            return TypedVar(name, str)
-        case AnyType():
-            return TypedAny(str)
+class Expression:
+    T = In | Var | Ordinal
 
 
-def typed_from_value(exp: ValueExpression, attribute: Attr) -> TypedExpression:
-    match exp:
-        case Var(name):
-            return TypedVar(name, attribute.data_type)
-        case AnyType():
-            return TypedAny(attribute.data_type)
-        case In(name, values):
-            return TypedIn(name, values, attribute.data_type)
-        case str(value) | int(value):
-            return value
+class LookUpExpression:
+    T = Any | Expression.T
 
-
-def expression_type(exp: TypedExpression) -> type[Ordinal]:
-    match exp:
-        case (
-            TypedIn(_, _, data_type)
-            | TypedVar(_, data_type)
-            | TypedAny(data_type)
-        ):
-            return data_type
-        case int():
-            return int
-        case str():
-            return str
-
-
-def expression_weight(exp: TypedExpression) -> int:
-    match exp:
-        case int() | str():
-            return 0
-        case TypedIn(_, values):
-            # if has no values will produce no results,
-            # so should be executed first
-            return 1 if values else -100
-        case TypedVar():
-            return 3
-        case TypedAny():
-            return 7
-
-
-def expression_var_name(exp: TypedExpression) -> str | None:
-    match exp:
-        case TypedIn(name) | TypedVar(name):
-            return name
-        case TypedAny() | int() | str():
-            return None
-
-
-def expression_matches(
-    expression: TypedExpression, value: Ordinal
-) -> t.Optional[Context]:
-    """Returns the micro solution of matching an TypedExpression over a value.
-
-    Returning None means that there was no match
-    """
-    match expression:
-        case str(ordinal_value) | int(ordinal_value):
-            return {} if ordinal_value == value else None
-        case TypedIn(name, values):
-            return {name: value} if value in values else None
-        case TypedVar(name):
-            return {name: value}
-        case TypedAny():
-            return {}
-
-
-def substitute_using(
-    expression: TypedExpression,
-    contexts: list[Context],
-) -> TypedExpression:
-    match expression:
-        case str() | int() | TypedAny():
-            return expression
-        case TypedIn(name, desired_values, data_type):
-            values = pluck_values(contexts, name, data_type)
-            if not values:
-                return expression
-            else:
-                # contrain to the desired values
-                values = values.intersection(desired_values)
-                if len(values) == 1:
-                    return values.pop()
+    @classmethod
+    def from_entity_expression(cls, exp: untyped.EntityExpression) -> T:
+        match exp:
+            case str():
+                return exp
+            case untyped.In(name, values):
+                if all_are(values, str):
+                    return In(name, values, str)
                 else:
-                    return TypedIn(name, values, data_type)
-        case TypedVar(name, data_type):
-            values = pluck_values(contexts, name, data_type)
-            if not values:
-                # no values found means that the variable still not defined
-                return expression
-            elif len(values) == 1:
-                # just one value found means that this is now a literal
-                return values.pop()
-            else:
-                # a few values found means this is an TypedIn expression
-                return TypedIn(expression.name, values, data_type)
+                    raise TypeError(
+                        f"Found entity values that are not str: {values}"
+                    )
+            case untyped.Var(name):
+                return Var(name, str)
+            case untyped.AnyType():
+                return Any(str)
+
+    @classmethod
+    def from_value_expression(
+        cls,
+        exp: untyped.ValueExpression,
+        attr_name: str,
+        attributes: AttrDict,
+    ) -> T:
+        match exp:
+            case str(value) | int(value):
+                return value
+            case untyped.Var(name):
+                return Var(name, attributes[attr_name].data_type)
+            case untyped.AnyType():
+                return Any(attributes[attr_name].data_type)
+            case untyped.In(name, values):
+                return In(name, values, attributes[attr_name].data_type)
+
+    @classmethod
+    def ordinal_type(cls, self: T) -> type[Ordinal]:
+        match self:
+            case (In(_, _, data_type) | Var(_, data_type) | Any(data_type)):
+                return data_type
+            case int():
+                return int
+            case str():
+                return str
+
+    @classmethod
+    def weight(cls, self: T) -> int:
+        match self:
+            case int() | str():
+                return 0
+            case In(_, values):
+                # if has no values will produce no results,
+                # so should be executed first
+                return 1 if values else -100
+            case Var():
+                return 3
+            case Any():
+                return 7
+
+    @classmethod
+    def var_name(cls, self: T) -> str | None:
+        match self:
+            case In(name) | Var(name):
+                return name
+            case Any() | int() | str():
+                return None
+
+    @classmethod
+    def matches(cls, self: T, value: Ordinal) -> t.Optional[Context]:
+        """Returns the micro solution of matching an TypedExpression over a value.
+
+        Returning None means that there was no match
+        """
+        match self:
+            case str(ordinal_value) | int(ordinal_value):
+                return {} if ordinal_value == value else None
+            case In(name, values):
+                return {name: value} if value in values else None
+            case Var(name):
+                return {name: value}
+            case Any():
+                return {}
+
+    @classmethod
+    def substitute(cls, self: T, contexts: t.Sequence[Context]) -> T:
+        match self:
+            case str() | int() | Any():
+                return self
+            case In() | Var():
+                return self.substitute(contexts)

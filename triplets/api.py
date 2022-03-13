@@ -1,10 +1,11 @@
-from .ast import Any, Var
+from .ast_untyped import Any, In, Var
 from .core import compile_rules
 from .models import StoredFact
 
 __all__ = [
     "Any",
     "Var",
+    "In",
     "compile_rules",
     "add",
     "bulk_add",

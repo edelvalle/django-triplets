@@ -6,7 +6,9 @@ from django.conf import settings
 from django.db import models
 from uuid6 import uuid7
 
-from . import ast, core
+from . import ast
+from . import ast_untyped as untyped
+from . import core
 
 INFERENCE_RULES: t.Sequence[core.Rule] = getattr(
     settings, "TRIPLETS_INFERENCE_RULES", []
@@ -23,17 +25,17 @@ NANO_SECOND = 10**9
 
 class Fact:
     @classmethod
-    def storage_key(cls, fact: ast.Fact) -> str:
+    def storage_key(cls, fact: untyped.Fact) -> str:
         return core.storage_hash(cls.to_str(fact))
 
     @classmethod
-    def storage_key_for_many(cls, facts: set[ast.Fact]) -> str:
+    def storage_key_for_many(cls, facts: set[untyped.Fact]) -> str:
         return core.storage_hash(
             str(list(sorted(cls.to_str(f) for f in facts)))
         )
 
     @classmethod
-    def as_dict(cls, fact: ast.Fact) -> ast.Context:
+    def as_dict(cls, fact: untyped.Fact) -> ast.Context:
         entity, attr, value = fact
         return {
             "entity": entity,
@@ -42,19 +44,19 @@ class Fact:
         }
 
     @classmethod
-    def to_str(cls, fact: ast.Fact) -> str:
+    def to_str(cls, fact: untyped.Fact) -> str:
         entity, attr, value = fact
         return f"fact:({entity},{attr},{ast.type_name(type(value))}:{value})"
 
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
-    def add(self, fact: ast.Fact) -> None:
+    def add(self, fact: untyped.Fact) -> None:
         """Adds a fact to knowledge base."""
         self.bulk_add([fact])
 
     def bulk_add(
         self,
-        facts: t.Sequence[ast.Fact],
+        facts: t.Sequence[untyped.Fact],
         tx_id: t.Optional[UUID] = None,
     ):
         """Use this method to add many facts to the knowledge base.
@@ -72,9 +74,9 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         tx_id: UUID,
         fact_rule_id_bases: t.Sequence[
             tuple[
-                ast.Fact,
+                untyped.Fact,
                 t.Optional[str],
-                t.Optional[set[ast.Fact]],
+                t.Optional[set[untyped.Fact]],
             ]
         ],
     ):
@@ -96,7 +98,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 ignore_conflicts=True,
             )
 
-            fact_to_stored_fact_id: dict[ast.Fact, UUID] = {
+            fact_to_stored_fact_id: dict[untyped.Fact, UUID] = {
                 stored_fact.as_fact: stored_fact.id
                 for stored_fact in stored_facts
             }
@@ -126,7 +128,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             )
         self._garbage_collect(tx_id)
 
-    def _remove_previous_values(self, tx_id: UUID, facts: set[ast.Fact]):
+    def _remove_previous_values(self, tx_id: UUID, facts: set[untyped.Fact]):
         facts = {
             fact for fact in facts if ATTRIBUTES[fact[1]].cardinality == "one"
         }
@@ -136,11 +138,11 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 query |= models.Q(entity=entity, attr=attr)
             self._bulk_remove(tx_id, query)
 
-    def remove(self, fact: ast.Fact):
+    def remove(self, fact: untyped.Fact):
         """Removes a fact form the knowledge base"""
         self.bulk_remove({fact})
 
-    def bulk_remove(self, facts: set[ast.Fact]):
+    def bulk_remove(self, facts: set[untyped.Fact]):
         if facts:
             tx = Transaction.new()
             query = models.Q()
@@ -159,7 +161,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
 
         q = models.Q()
         while facts:
-            next_facts: set[ast.Fact] = set()
+            next_facts: set[untyped.Fact] = set()
             for fact, rule_id, bases in core.run_rules_matching(
                 facts, INFERENCE_RULES, self._lookup
             ):
@@ -215,7 +217,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             tx.id, list(core.refresh_rules(INFERENCE_RULES, self._lookup))
         )
 
-    def _lookup(self, predicate: core.Clause) -> t.Iterable[ast.Fact]:
+    def _lookup(self, predicate: core.Clause) -> t.Iterable[untyped.Fact]:
         "This is used by the core engine to lookup predicates in the database"
         query: dict[str, t.Any] = {
             "attr": predicate.attr,
@@ -223,9 +225,9 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         match predicate.entity:
             case str():
                 query["entity"] = predicate.entity
-            case ast.TypedIn(_, values):
+            case ast.In(_, values):
                 query["entity__in"] = values
-            case ast.TypedAny() | ast.TypedVar():
+            case ast.Any() | ast.Var():
                 ...
             case int():
                 raise TypeError(
@@ -237,14 +239,14 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             case int(value) | str(value):
                 suffix = ast.type_name(type(value))
                 query[f"value_{suffix}"] = value
-            case ast.TypedIn(_, values, data_type):
+            case ast.In(_, values, data_type):
                 if values:
                     suffix = ast.type_name(data_type)
                     query[f"value_{suffix}__in"] = values
                 else:
                     # this is looking for nothing, so is safe to abort here
                     return []
-            case ast.TypedAny(data_type) | ast.TypedVar(_, data_type):
+            case ast.Any(data_type) | ast.Var(_, data_type):
                 suffix = ast.type_name(data_type)
 
         return self.filter(**query).values_list(
@@ -299,7 +301,7 @@ class Transaction(models.Model):
     @property
     def mutations(
         self,
-    ) -> t.Iterable[tuple[t.Literal["+", "-"], ast.Fact]]:
+    ) -> t.Iterable[tuple[t.Literal["+", "-"], untyped.Fact]]:
         for added in StoredFact.objects.filter(added_id=self.id):
             yield "+", added.as_fact
         for removed in StoredFact.objects.filter(removed_id=self.id):
@@ -384,7 +386,7 @@ class StoredFact(models.Model):
         return f"{self.entity} -({self.attr})-> {self.value}"
 
     @property
-    def as_fact(self) -> ast.Fact:
+    def as_fact(self) -> untyped.Fact:
         return (self.entity, self.attr, self.value)
 
 

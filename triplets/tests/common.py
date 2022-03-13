@@ -5,7 +5,8 @@ from uuid import UUID
 from django.test import TestCase
 
 from .. import api, models
-from ..ast import Attr, Ordinal, Var
+from ..api import Var
+from ..ast import Attr, Ordinal
 from ..core import PredicateTuples, Rule, compile_rules
 
 attributes = Attr.as_dict(
