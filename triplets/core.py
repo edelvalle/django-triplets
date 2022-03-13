@@ -4,8 +4,8 @@ from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
 
-from .ast import Any, AttrDict, LookUpExpression, Ordinal, VarTypes
-from .ast_untyped import AnyType, ClauseTuple, Context, Fact, PredicateTuples
+from .ast import AttrDict, LookUpExpression, Ordinal, VarTypes
+from .ast_untyped import ClauseTuple, Context, Fact, PredicateTuples
 from .result import Err, Ok
 
 
