@@ -4,6 +4,7 @@ from .. import ast as typed
 from ..ast import Attr, LookUpExpression
 from ..ast_untyped import Any, In, Var
 from ..core import Clause, Predicate, compile_rules
+from ..result import Err, Ok
 
 
 class TestExpressions(TestCase):
@@ -166,30 +167,39 @@ class TestClause(TestCase):
         )
 
     def test_variable_names_returns_the_name_of_the_variables(self):
-        self.assertDictEqual(
+        self.assertEqual(
             Clause(
                 typed.Var("person", str), "son_of", typed.Var("parent", str)
             ).variable_types,
-            {"person": {str}, "parent": {str}},
+            Ok({"person": str, "parent": str}),
         )
-        self.assertDictEqual(
+        self.assertEqual(
             Clause("entity", "attr", "value").variable_types,
-            {},
+            Ok({}),
         )
-        self.assertDictEqual(
+
+        self.assertEqual(
             Clause(typed.Var("entity", str), "attr", "value").variable_types,
-            {"entity": {str}},
+            Ok(value={"entity": str}),
         )
-        self.assertDictEqual(
+        self.assertEqual(
             Clause("entity", "attr", typed.Var("value", int)).variable_types,
-            {"value": {int}},
+            Ok({"value": int}),
         )
-        self.assertDictEqual(
+        self.assertEqual(
             Clause(
                 typed.In("entity", set(), str), "attr", typed.Var("value", int)
             ).variable_types,
-            {"entity": {str}, "value": {int}},
+            Ok({"entity": str, "value": int}),
         )
+        self.assertEqual(
+            Clause(
+                typed.Var("entity", str), "attr", typed.Var("entity", int)
+            ).variable_types,
+            Err({"entity": {str, int}}),
+        )
+
+        # TODO: comparison, test the Err case when this fails, because we have
 
 
 class TestPredicate(TestCase):
@@ -200,9 +210,15 @@ class TestPredicate(TestCase):
         )
         with self.assertRaises(TypeError) as e:
             Predicate.from_tuples(attributes, [(Var("age"), "age", Var("age"))])
+
         self.assertEqual(
             str(e.exception),
-            "Variable `age` can't have more than one type, and it has: ['str', 'int']",
+            "\n".join(
+                [
+                    "Type mismatch in Predicate [(?age: str, age, ?age: int)], these variables have different types:",
+                    "- age: str, int",
+                ]
+            ),
         )
 
         with self.assertRaises(TypeError) as e:
@@ -213,9 +229,15 @@ class TestPredicate(TestCase):
                     ("x", "color", Var("age")),
                 ],
             )
+
         self.assertEqual(
             str(e.exception),
-            "Variable `age` can't have more than one type, and it has: ['str', 'int']",
+            "\n".join(
+                [
+                    "Type mismatch in Predicate [(?person: str, age, ?age: int), (x, color, ?age: str)], these variables have different types:",
+                    "- age: str, int",
+                ]
+            ),
         )
 
 
@@ -225,7 +247,7 @@ class TestRule(TestCase):
         Attr("color", str, "many"),
     )
 
-    def test_checks_that_is_not_missing_any_variables_with_predicate(self):
+    def test_checks_that_is_not_missing_any_variables(self):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
@@ -240,15 +262,12 @@ class TestRule(TestCase):
 
         self.assertEqual(
             str(e.exception),
-            "\n".join(
-                [
-                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?parent: str, color, blue)]:",
-                    " - Variable `?parent: <class 'str'>` is missing in the predicate",
-                ]
-            ),
+            "Rule: [(?person: str, age, ?age: int in {1, 2}), "
+            "(?person: str, color, ?: str)] => [(?parent: str, color, blue)], "
+            "is missing these variables in the predicate: {'parent'}",
         )
 
-    def test_checks_that_for_type_missmatch_with_predicate(self):
+    def test_checks_that_for_type_missmatch(self):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
@@ -265,64 +284,13 @@ class TestRule(TestCase):
             str(e.exception),
             "\n".join(
                 [
-                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
-                    " - Type mismatch in variable `?age`, got <class 'int'>, requires: <class 'str'>",
+                    "Type mismatch in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
+                    "- age: str, int",
                 ]
             ),
         )
 
-    def test_checks_that_for_type_missmatch_with_function(self):
-        with self.assertRaises(TypeError) as e:
-
-            class TestRule:
-                predicate = [
-                    (Var("person"), "age", In("age", {1, 2})),
-                    (Var("person"), "color", Var("color")),
-                ]
-
-                @staticmethod
-                def implies(parent: str, color: int):
-                    return [(parent, "color", color)]
-
-            compile_rules(self.attributes, TestRule)
-
-        self.assertEqual(
-            str(e.exception),
-            "\n".join(
-                [
-                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?color: str)] => f(parent: str, color: int):",
-                    " - Variable `?parent: <class 'str'>` is missing in the predicate",
-                    " - Type mismatch in variable `?color`, got <class 'str'>, requires: <class 'int'>",
-                ]
-            ),
-        )
-
-    def test_checks_that_is_not_missing_any_variables_with_functions(self):
-        with self.assertRaises(TypeError) as e:
-
-            class TestRule:
-                predicate = [
-                    (Var("person"), "age", In("age", {1, 2})),
-                    (Var("person"), "color", Any),
-                ]
-
-                @staticmethod
-                def implies(parent):  # type: ignore
-                    return [(parent, "color", "blue")]  # type: ignore
-
-            compile_rules(self.attributes, TestRule)
-
-        self.assertEqual(
-            str(e.exception),
-            "\n".join(
-                [
-                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => f(parent):",
-                    " - Variable `?parent: None` is missing in the predicate",
-                ]
-            ),
-        )
-
-    def test_checks_that_has_not_any_in_the_conclusions(self):
+    def test_checks_that_has_not_any_in_the_implication(self):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
@@ -336,10 +304,5 @@ class TestRule(TestCase):
 
         self.assertEqual(
             str(e.exception),
-            "\n".join(
-                [
-                    "Error(s) in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, blue)] => [(?: str, color, blue)]:",
-                    " - Implications can't have `?` in them",
-                ]
-            ),
+            "Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, blue)] => [(?: str, color, blue)], implications can't have Any on them",
         )

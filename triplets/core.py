@@ -1,19 +1,12 @@
-import inspect
 import typing as t
-from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
 
 from .ast import Any, AttrDict, LookUpExpression, Ordinal, VarTypes
-from .ast_untyped import (
-    ClauseTuple,
-    Context,
-    Fact,
-    OrdinalTypes,
-    PredicateTuples,
-)
+from .ast_untyped import AnyType, ClauseTuple, Context, Fact, PredicateTuples
+from .result import Err, Ok
 
 
 def storage_hash(text: str):
@@ -102,13 +95,13 @@ class Clause:
         )
 
     @property
-    def variable_types(self) -> defaultdict[str, set[type[Ordinal]]]:
-        variable_types: defaultdict[str, set[type[Ordinal]]] = defaultdict(set)
-        if name := LookUpExpression.var_name(self.entity):
-            variable_types[name].add(LookUpExpression.ordinal_type(self.entity))
-        if name := LookUpExpression.var_name(self.value):
-            variable_types[name].add(LookUpExpression.ordinal_type(self.value))
-        return variable_types
+    def variable_types(self) -> VarTypes.MergeResult:
+        return VarTypes.merge(
+            [
+                LookUpExpression.variable_types(self.entity),
+                LookUpExpression.variable_types(self.value),
+            ]
+        )
 
     @property
     def as_fact(self) -> t.Optional[Fact]:
@@ -130,9 +123,10 @@ class Clause:
         return Solution(entity_match | value_match, {fact})
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, init=False)
 class Predicate(t.Iterable[Clause]):
     clauses: list[Clause]
+    variables_types: VarTypes.T
 
     @classmethod
     def from_tuples(
@@ -144,10 +138,22 @@ class Predicate(t.Iterable[Clause]):
             [Clause.from_tuple(clause, attributes) for clause in predicate]
         )
 
-    def __post_init__(self):
-        # validate that the types of all variables are coherent
-        # this will raise if
-        self.variable_types
+    def __init__(
+        self, clauses: list[Clause], variables_types: VarTypes.T | None = None
+    ):
+        self.clauses = clauses
+        if variables_types is None:
+            match VarTypes.merge(clause.variable_types for clause in self):
+                case Ok(v_types):
+                    self.variables_types = v_types
+                case Err(mismatches):
+                    VarTypes.raise_error(
+                        mismatches,
+                        f"Type mismatch in Predicate {self}, "
+                        f"these variables have different types:",
+                    )
+        else:
+            self.variables_types = variables_types
 
     def __repr__(self) -> str:
         return str(self.clauses)
@@ -158,30 +164,17 @@ class Predicate(t.Iterable[Clause]):
     def substitute(self, contexts: list[Context]) -> t.Iterable[Clause]:
         return (clause.substitute_using(contexts) for clause in self)
 
+    def evaluate(self, context: Context) -> t.Iterable[Fact]:
+        for clause in self.substitute([context]):
+            if (fact := clause.as_fact) is not None:
+                yield fact
+
     def matches(self, fact: Fact) -> t.Iterable[Solution]:
         return (
             solution
             for clause in self
             if (solution := clause.matches(fact)) is not None
         )
-
-    @property
-    def variable_types(self) -> VarTypes:
-        variable_types: defaultdict[str, set[type[Ordinal]]] = defaultdict(set)
-        for clause in self.clauses:
-            for name, types in clause.variable_types.items():
-                variable_types[name].update(types)
-
-        result: VarTypes = {}
-        for var_name, types in variable_types.items():
-            if len(types) == 1:
-                result[var_name] = types.pop()
-            else:
-                raise TypeError(
-                    f"Variable `{var_name}` can't have more than one type, and "
-                    f"it has: {[t.__name__ for t in types]}"
-                )
-        return result
 
     def __iter__(self) -> t.Iterator[Clause]:
         return iter(self.clauses)
@@ -236,73 +229,114 @@ class Query:
             return self.solutions
 
 
-@dataclass(slots=True)
-class Conclusions:
-    Function = t.Callable[..., t.Iterable[Fact]]
+# @dataclass(slots=True)
+# class Conclusions:
+#     Function = t.Callable[..., t.Iterable[Fact]]
 
-    conclusions: Predicate | Function
+#     conclusions: Predicate | Function
 
-    @classmethod
-    def from_tuples(
-        cls: type["Conclusions"],
-        attributes: AttrDict,
-        predicate: PredicateTuples | Function,
-    ) -> "Conclusions":
-        if callable(predicate):
-            return cls(predicate)
-        else:
-            return cls(Predicate.from_tuples(attributes, predicate))
+#     @classmethod
+#     def from_tuples(
+#         cls: type["Conclusions"],
+#         attributes: AttrDict,
+#         predicate: PredicateTuples | Function,
+#     ) -> "Conclusions":
+#         if callable(predicate):
+#             return cls(predicate)
+#         else:
+#             return cls(Predicate.from_tuples(attributes, predicate))
 
-    def __repr__(self) -> str:
-        if callable(self.conclusions):
-            return f"f{inspect.signature(self.conclusions)}"
-        else:
-            return str(self.conclusions)
+#     def __repr__(self) -> str:
+#         if callable(self.conclusions):
+#             return f"f{inspect.signature(self.conclusions)}"
+#         else:
+#             return str(self.conclusions)
 
-    @property
-    def has_any_type(self) -> bool:
-        if isinstance(self.conclusions, Predicate):
-            return any(
-                isinstance(c.entity, Any) or isinstance(c.value, Any)
-                for c in self.conclusions.clauses
-            )
-        else:
-            return False
+#     @property
+#     def has_any_type(self) -> bool:
+#         if isinstance(self.conclusions, Predicate):
+#             return any(
+#                 isinstance(c.entity, Any) or isinstance(c.value, Any)
+#                 for c in self.conclusions.clauses
+#             )
+#         else:
+#             return False
 
-    def evaluate(self, context: Context) -> t.Iterable[Fact]:
-        if isinstance(self.conclusions, Predicate):
-            for clause in self.conclusions.substitute([context]):
-                if (fact := clause.as_fact) is not None:
-                    yield fact
-        else:
-            yield from self.conclusions(**context)
+#     def evaluate(self, context: Context) -> t.Iterable[Fact]:
+#         if isinstance(self.conclusions, Predicate):
+#             for clause in self.conclusions.substitute([context]):
+#                 if (fact := clause.as_fact) is not None:
+#                     yield fact
+#         else:
+#             yield from self.conclusions(**context)
 
-    @property
-    def variable_types(
-        self,
-    ) -> t.Iterable[tuple[str, t.Optional[type[Ordinal]]]]:
-        if isinstance(self.conclusions, Predicate):
-            yield from self.conclusions.variable_types.items()
-        else:
-            params = inspect.signature(self.conclusions).parameters.values()
-            for param in params:
-                if param.kind not in (
-                    inspect.Parameter.VAR_POSITIONAL,
-                    inspect.Parameter.VAR_KEYWORD,
-                ):
-                    param_type = (
-                        param.annotation
-                        if param.annotation in OrdinalTypes
-                        else None
-                    )
-                    yield param.name, param_type
+#     @property
+#     def variable_types(
+#         self,
+#     ) -> t.Iterable[tuple[str, t.Optional[type[Ordinal]]]]:
+#         if isinstance(self.conclusions, Predicate):
+#             yield from self.conclusions.variable_types.items()
+#         else:
+#             params = inspect.signature(self.conclusions).parameters.values()
+#             for param in params:
+#                 if param.kind not in (
+#                     inspect.Parameter.VAR_POSITIONAL,
+#                     inspect.Parameter.VAR_KEYWORD,
+#                 ):
+#                     param_type = (
+#                         param.annotation
+#                         if param.annotation in OrdinalTypes
+#                         else None
+#                     )
+#                     yield param.name, param_type
 
 
-@dataclass
+@dataclass(init=False)
 class Rule:
     predicate: Predicate
-    conclusions: Conclusions
+    implies: Predicate
     _context: Context = field(default_factory=dict)
+    _variable_types: VarTypes.T = field(default_factory=dict)
+
+    def __init__(
+        self,
+        predicate: Predicate,
+        implies: Predicate,
+        _context: Context | None = None,
+        _variable_types: VarTypes.T | None = None,
+    ):
+        self.predicate = predicate
+        self.implies = implies
+        self._context = _context or {}
+        if _variable_types is None:
+            if any(
+                var_name.startswith("*")
+                for var_name in self.implies.variables_types
+            ):
+                raise TypeError(f"{self}, implications can't have Any on them")
+
+            if missing_variables := set(self.implies.variables_types) - set(
+                self.predicate.variables_types
+            ):
+                raise TypeError(
+                    f"{self}, is missing these variables in the predicate: "
+                    f"{missing_variables}"
+                )
+
+            match VarTypes.merge(
+                [
+                    Ok(self.predicate.variables_types),
+                    Ok(self.implies.variables_types),
+                ]
+            ):
+                case Ok(var_types):
+                    self._variable_types = var_types
+                case Err(mismatches):
+                    VarTypes.raise_error(
+                        mismatches, f"Type mismatch in {self}:"
+                    )
+        else:
+            self._variable_types = _variable_types
 
     @cached_property
     def id(self) -> str:
@@ -312,32 +346,8 @@ class Rule:
         """
         return storage_hash(self.__repr__())
 
-    def validate(self) -> "Rule":
-        predicate_vars = self.predicate.variable_types
-        err_msgs: list[str] = []
-        for var_name, var_type in self.conclusions.variable_types:
-            if (predicate_var_type := predicate_vars.get(var_name)) is not None:
-                if var_type is not None and not issubclass(
-                    var_type, predicate_var_type
-                ):
-                    err_msgs.append(
-                        f"Type mismatch in variable `?{var_name}`, "
-                        f"got {predicate_var_type}, requires: {var_type}",
-                    )
-            else:
-                err_msgs.append(
-                    f"Variable `?{var_name}: {var_type}` is missing in the predicate"
-                )
-
-        if self.conclusions.has_any_type:
-            err_msgs.append(f"Implications can't have `?` in them")
-
-        if err_msgs:
-            raise TypeError("\n - ".join([f"Error(s) in {self}:"] + err_msgs))
-        return self
-
     def __repr__(self) -> str:
-        return f"Rule: {self.predicate} => {self.conclusions}"
+        return f"Rule: {self.predicate} => {self.implies}"
 
     def matches(self, fact: Fact) -> t.Iterable["Rule"]:
         """If the `fact` matches this rule this function returns a rule
@@ -348,7 +358,8 @@ class Rule:
             yield replace(
                 self,
                 predicate=Predicate(list(predicate)),
-                conclusions=self.conclusions,
+                implies=self.implies,
+                _variable_types=self._variable_types,
                 _context=self._context | match.context,
             )
 
@@ -357,23 +368,21 @@ class Rule:
         lookup: LookUpFunction,
     ) -> t.Iterable[tuple[Fact, set[Fact]]]:
         for solution in Query(self.predicate).solve(lookup):
-            for fact in self.conclusions.evaluate(
-                self._context | solution.context
-            ):
+            for fact in self.implies.evaluate(self._context | solution.context):
                 yield (fact, solution.derived_from)
 
 
 class RuleProtocol(t.Protocol):
     predicate: PredicateTuples
-    implies: PredicateTuples | Conclusions.Function
+    implies: PredicateTuples
 
 
 def compile_rules(attributes: AttrDict, *rules: RuleProtocol) -> list[Rule]:
     return [
         Rule(
             Predicate.from_tuples(attributes, r.predicate),
-            Conclusions.from_tuples(attributes, r.implies),
-        ).validate()
+            Predicate.from_tuples(attributes, r.implies),
+        )
         for r in rules
     ]
 

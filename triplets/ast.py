@@ -1,10 +1,50 @@
 import typing as t
+from collections import defaultdict
 from dataclasses import dataclass, replace
+from uuid import uuid4
 
 from . import ast_untyped as untyped
 from .ast_untyped import Context, Ordinal, OrdinalType
+from .result import Err, Ok, Result
 
-VarTypes = dict[str, OrdinalType]
+
+class VarTypes:
+    T = dict[str, OrdinalType]
+    Mismatches = defaultdict[str, set[OrdinalType]]
+    MergeResult = Result[T, Mismatches]
+
+    @staticmethod
+    def merge(results: t.Iterable[MergeResult]) -> MergeResult:
+        """Merges the variables types from `a` and `b`.
+        This fails in case a variable from `a` has a different type in `b`.
+        """
+        final_result: VarTypes.T = {}
+        final_mismatches: VarTypes.Mismatches = defaultdict(set)
+
+        for result in results:
+            match result:
+                case Ok(var_types):
+                    for name, var_type in var_types.items():
+                        if (
+                            r_type := final_result.get(name)
+                        ) is None or r_type == var_type:
+                            final_result[name] = var_type
+                        else:
+                            final_mismatches[name].update([r_type, var_type])
+                case Err(mismatches):
+                    for name, types in mismatches.items():
+                        final_mismatches[name].update(types)
+
+        return Err(final_mismatches) if final_mismatches else Ok(final_result)
+
+    @staticmethod
+    def raise_error(mismatches: Mismatches, msg: str):
+        messages = [msg]
+        for name, types in mismatches.items():
+            messages.append(
+                f"- {name}: " + ", ".join(type_name(t) for t in types)
+            )
+        raise TypeError("\n".join(messages))
 
 
 def type_name(ty: type) -> str:
@@ -152,6 +192,17 @@ class LookUpExpression:
                 return int
             case str():
                 return str
+
+    @classmethod
+    def variable_types(cls, self: T) -> VarTypes.MergeResult:
+        match self:
+            case int() | str():
+                return Ok({})
+            case In(name, _, data_type) | Var(name, data_type):
+                return Ok({name: data_type})
+            case Any(data_type):
+                # special name for Any variables
+                return Ok({f"*{uuid4()}": data_type})
 
     @classmethod
     def weight(cls, self: T) -> int:
