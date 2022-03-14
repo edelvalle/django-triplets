@@ -39,7 +39,7 @@ class TestInference(common.TestUsingDjango):
             solutions = self.solve([(Var("a"), "descendant_of", Var("b"))])
             self.assertSetEqual(solutions, set())
 
-        with self.assertNumQueries(46):
+        with self.assertNumQueries(38):
             models.INFERENCE_RULES = common.descendants_rules
             api.refresh_inference()
 
@@ -82,7 +82,7 @@ class TestInference(common.TestUsingDjango):
             )
 
     def test_deleting_a_primary_fact_deletes_its_deductions_and_travel(self):
-        with self.assertNumQueries(52):
+        with self.assertNumQueries(44):
             self.populate_db(common.descendants_rules)
 
         before_removing_the_granfather_real_tx = (
@@ -92,7 +92,7 @@ class TestInference(common.TestUsingDjango):
             (datetime).utcnow().astimezone(timezone.utc)
         )
 
-        with self.assertNumQueries(18):
+        with self.assertNumQueries(16):
             api.remove(("father", "child_of", "grandfather"))
 
         with self.assertNumQueries(1):
@@ -160,7 +160,7 @@ class TestInference(common.TestUsingDjango):
         )
 
     def test_cant_delete_deduced_fact(self):
-        with self.assertNumQueries(52):
+        with self.assertNumQueries(44):
             self.populate_db(common.descendants_rules)
 
         with self.assertNumQueries(2):
@@ -172,7 +172,7 @@ class TestInference(common.TestUsingDjango):
             )
 
     def test_change_of_gender(self):
-        with self.assertNumQueries(39):
+        with self.assertNumQueries(37):
             self.populate_db(common.parent_role_rules)
 
         self._assert_father_is_dad_and_mother_is_mom()

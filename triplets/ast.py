@@ -1,6 +1,6 @@
 import typing as t
 from collections import defaultdict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
 from . import ast_untyped as untyped
@@ -90,6 +90,9 @@ class In:
     def __repr__(self) -> str:
         return f"?{self.name}: {self.data_type.__name__} in {self.values}"
 
+    def __hash__(self):
+        return hash((self.name, tuple(self.values), self.data_type))
+
     def substitute(
         self, contexts: t.Iterable[Context]
     ) -> t.Union["In", Ordinal]:
@@ -116,6 +119,9 @@ class Var:
     def __repr__(self) -> str:
         return f"?{self.name}: {self.data_type.__name__}"
 
+    def __hash__(self) -> int:
+        return hash((self.name, self.data_type))
+
     def substitute(
         self, contexts: t.Iterable[Context]
     ) -> t.Union[In, "Var", Ordinal]:
@@ -133,9 +139,13 @@ class Var:
 @dataclass(slots=True)
 class Any:
     data_type: type[Ordinal]
+    internal_name: str = field(default_factory=lambda: f"*{uuid4()}")
 
     def __repr__(self) -> str:
         return f"?: {self.data_type.__name__}"
+
+    def __hash__(self):
+        return hash((self.internal_name, self.data_type))
 
 
 def all_are(values: set[t.Any], ty: type[object]) -> bool:
@@ -198,25 +208,12 @@ class LookUpExpression:
         match self:
             case int() | str():
                 return Ok({})
-            case In(name, _, data_type) | Var(name, data_type):
+            case (
+                In(name, _, data_type)
+                | Var(name, data_type)
+                | Any(data_type, name)
+            ):
                 return Ok({name: data_type})
-            case Any(data_type):
-                # special name for Any variables
-                return Ok({f"*{uuid4()}": data_type})
-
-    @classmethod
-    def weight(cls, self: T) -> int:
-        match self:
-            case int() | str():
-                return 0
-            case In(_, values):
-                # if has no values will produce no results,
-                # so should be executed first
-                return 1 if values else -100
-            case Var():
-                return 3
-            case Any():
-                return 7
 
     @classmethod
     def var_name(cls, self: T) -> str | None:

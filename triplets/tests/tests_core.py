@@ -117,21 +117,26 @@ class TestClause(TestCase):
             (Var("person"), "son_of", Any), self.attributes
         )
         self.assertEqual(
-            clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
-            Clause(typed.Var("person", str), "son_of", typed.Any(str)),
+            str(clause.substitute_using([{"parent": "A"}, {"parent": "B"}])),
+            "(?person: str, son_of, ?: str)",
         )
         self.assertEqual(
-            clause.substitute_using(
-                [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
+            str(
+                clause.substitute_using(
+                    [
+                        {"person": "P", "parent": "A"},
+                        {"person": "P", "parent": "B"},
+                    ]
+                )
             ),
-            Clause("P", "son_of", typed.Any(str)),
+            "(P, son_of, ?: str)",
         )
         self.assertEqual(
             clause.substitute_using([{"unknown": "VALUE"}]),
             clause,
         )
 
-    def test_sorting_protocol_prioritize_the_more_literal_one(self):
+    def test_predicate_query_planning_can_sort_clauses(self):
         predicate = Predicate.from_tuples(
             self.attributes,
             [
@@ -149,20 +154,18 @@ class TestClause(TestCase):
         )
 
         self.assertListEqual(
-            predicate.optimized_by([{}]),
+            [str(clause) for clause in predicate.planned],
             [
-                Clause(
-                    typed.In("a", {"a"}, str), "b", typed.In("c", set(), str)
-                ),
-                Clause("a", "b", "c"),
-                Clause("a", "b", typed.In("c", {"a"}, str)),
-                Clause(typed.In("a", {"a"}, str), "b", "c"),
-                Clause("a", "b", typed.Var("c", str)),
-                Clause(typed.Var("a", str), "b", "c"),
-                Clause(typed.In("a", {"a"}, str), "b", typed.Var("c", str)),
-                Clause(typed.Var("a", str), "b", typed.In("c", {"a"}, str)),
-                Clause(typed.Var("a", str), "b", typed.Var("c", str)),
-                Clause(typed.Any(str), "b", typed.In("c", {"a"}, str)),
+                "(a, b, c)",
+                "(a, b, ?c: str in {'a'})",
+                "(a, b, ?c: str)",
+                "(?a: str in {'a'}, b, ?c: str in set())",
+                "(?a: str in {'a'}, b, ?c: str)",
+                "(?a: str, b, ?c: str in {'a'})",
+                "(?a: str in {'a'}, b, c)",
+                "(?a: str, b, ?c: str)",
+                "(?a: str, b, c)",
+                "(?: str, b, ?c: str in {'a'})",
             ],
         )
 

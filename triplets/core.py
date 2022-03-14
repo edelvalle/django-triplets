@@ -81,19 +81,6 @@ class Clause:
             value=LookUpExpression.substitute(self.value, contexts),
         )
 
-    def __lt__(self, other: "Clause") -> bool:
-        """This is here for the sorting protocol and query optimization"""
-        return self.sorting_key < other.sorting_key
-
-    @cached_property
-    def sorting_key(self) -> int:
-        """The more defined (literal values) this clause has, the lower
-        the sorting number will be. So it gets priority when performing queries.
-        """
-        return LookUpExpression.weight(self.entity) + LookUpExpression.weight(
-            self.value
-        )
-
     @property
     def variable_types(self) -> VarTypes.MergeResult:
         return VarTypes.merge(
@@ -158,8 +145,69 @@ class Predicate(t.Iterable[Clause]):
     def __repr__(self) -> str:
         return str(self.clauses)
 
-    def optimized_by(self, contexts: list[Context]) -> list[Clause]:
-        return list(sorted(self.substitute(contexts)))
+    @property
+    def planned(self) -> "Predicate":
+        """Assumes tha this predicate is a query and orders the clauses to
+        perform an optimal query
+        """
+        result: list[Clause] = []
+        solved_variables: set[str] = set()
+        # by this time the variables types are Ok
+        unsolved_clauses = {
+            clause: (
+                set(
+                    t.cast(
+                        VarTypes.T,
+                        LookUpExpression.variable_types(clause.entity).value,
+                    )
+                ),
+                set(
+                    t.cast(
+                        VarTypes.T,
+                        LookUpExpression.variable_types(clause.value).value,
+                    )
+                ),
+            )
+            for clause in self
+        }
+        while unsolved_clauses:
+            # this are clauses with max 1 var per side
+            solvable_clauses_to_vars = {
+                clause: left.union(right)
+                for clause, (left, right) in unsolved_clauses.items()
+                if len(left) <= 1 and len(right) <= 1
+            }
+            if not solvable_clauses_to_vars:
+                raise RuntimeError(
+                    f"Can't solve {self}, unsolved clauses: {unsolved_clauses}"
+                )
+
+            # the less variables the clause has the better
+            # if it has a variable of type Any, as it will probably produce many
+            # results, that one will go to the end of the tail to have it very
+            # constrained during lookup
+            priorized_clauses = sorted(
+                solvable_clauses_to_vars,
+                key=lambda clause: sum(
+                    # Make the `Any` matcher very expensive
+                    (10 if var_name.startswith("*") else 1)
+                    for var_name in solvable_clauses_to_vars[clause]
+                ),
+            )
+
+            # We pick the first one and continue
+            for selected_clause in priorized_clauses:
+                result.append(selected_clause)
+                solved_variables.update(
+                    solvable_clauses_to_vars[selected_clause]
+                )
+                unsolved_clauses = {
+                    clause: (left - solved_variables, right - solved_variables)
+                    for clause, (left, right) in unsolved_clauses.items()
+                    if clause != selected_clause
+                }
+                break
+        return replace(self, clauses=result)
 
     def substitute(self, contexts: list[Context]) -> t.Iterable[Clause]:
         return (clause.substitute_using(contexts) for clause in self)
@@ -199,22 +247,18 @@ class Query:
         attributes: AttrDict,
         predicate: PredicateTuples,
     ) -> "Query":
-        return cls(Predicate.from_tuples(attributes, predicate))
-
-    @property
-    def optimized_predicate(self) -> list[Clause]:
-        return self.predicate.optimized_by([s.context for s in self.solutions])
+        return cls(Predicate.from_tuples(attributes, predicate).planned)
 
     def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
         if self.predicate and self.solutions:
-            clause, *predicate = self.optimized_predicate
+            clause, *predicate = self.predicate
             predicate_solutions = [
                 match
                 for fact in lookup(clause)
                 if (match := clause.matches(fact)) is not None
             ]
             next_query = Query(
-                Predicate(predicate),
+                Predicate(predicate, self.predicate.variables_types),
                 solutions=list(
                     chain(
                         *[
