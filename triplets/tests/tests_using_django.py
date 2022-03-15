@@ -3,8 +3,6 @@ from . import common
 
 
 class TestDjango(common.TestUsingDjango):
-    checkNumQueries = False
-
     def setUp(self):
         self.populate_db([])
 
@@ -103,8 +101,9 @@ class TestDjango(common.TestUsingDjango):
         ]
 
         with self.assertNumQueries(2):
+            solutions = self.solve(query)
             self.assertSetEqual(
-                self.solve(query),
+                solutions,
                 {
                     frozenset(
                         {

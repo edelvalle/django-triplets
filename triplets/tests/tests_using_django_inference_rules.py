@@ -1,5 +1,6 @@
 import typing as t
 from datetime import datetime, timezone
+from pprint import pprint
 from uuid import UUID
 
 from .. import api, models
@@ -10,7 +11,7 @@ from . import common
 
 class TestInference(common.TestUsingDjango):
     def test_siblings_rule_in_action_when_using_a_db(self):
-        with self.assertNumQueries(29):
+        with self.assertNumQueries(19):
             self.populate_db(common.siblings_rule)
 
         with self.assertNumQueries(1):
@@ -32,14 +33,14 @@ class TestInference(common.TestUsingDjango):
             )
 
     def test_transition_from_a_set_of_rules_to_others(self):
-        with self.assertNumQueries(29):
+        with self.assertNumQueries(19):
             self.populate_db(common.siblings_rule)
 
         with self.assertNumQueries(1):
             solutions = self.solve([(Var("a"), "descendant_of", Var("b"))])
             self.assertSetEqual(solutions, set())
 
-        with self.assertNumQueries(38):
+        with self.assertNumQueries(28):
             models.INFERENCE_RULES = common.descendants_rules
             api.refresh_inference()
 
@@ -82,7 +83,7 @@ class TestInference(common.TestUsingDjango):
             )
 
     def test_deleting_a_primary_fact_deletes_its_deductions_and_travel(self):
-        with self.assertNumQueries(44):
+        with self.assertNumQueries(29):
             self.populate_db(common.descendants_rules)
 
         before_removing_the_granfather_real_tx = (
@@ -92,7 +93,7 @@ class TestInference(common.TestUsingDjango):
             (datetime).utcnow().astimezone(timezone.utc)
         )
 
-        with self.assertNumQueries(16):
+        with self.assertNumQueries(11):
             api.remove(("father", "child_of", "grandfather"))
 
         with self.assertNumQueries(1):
@@ -160,7 +161,7 @@ class TestInference(common.TestUsingDjango):
         )
 
     def test_cant_delete_deduced_fact(self):
-        with self.assertNumQueries(44):
+        with self.assertNumQueries(29):
             self.populate_db(common.descendants_rules)
 
         with self.assertNumQueries(2):
@@ -172,13 +173,13 @@ class TestInference(common.TestUsingDjango):
             )
 
     def test_change_of_gender(self):
-        with self.assertNumQueries(37):
+        with self.assertNumQueries(24):
             self.populate_db(common.parent_role_rules)
 
         self._assert_father_is_dad_and_mother_is_mom()
 
         # change dad's gender
-        with self.assertNumQueries(13):
+        with self.assertNumQueries(11):
             api.add(("father", "gender", "f"))
 
         last_transaction = models.Transaction.objects.last()
@@ -289,78 +290,77 @@ class TestInference(common.TestUsingDjango):
                 },
             )
 
-    # def test_using_multiple_data_types(self):
-    #     TODO: comparison
-    #     with self.assertNumQueries(7):
-    #         self.populate_db(common.age_stage_rules)
+    def test_using_multiple_data_types(self):
+        with self.assertNumQueries(7):
+            self.populate_db(common.age_stage_rules)
 
-    #     query = [
-    #         (Var("person"), "age", Var("age")),
-    #         (Var("person"), "age_stage", Var("stage")),
-    #     ]
-    #     with self.assertNumQueries(1):
-    #         solutions = self.solve(query)
-    #         self.assertSetEqual(solutions, set())
+        query = [
+            (Var("person"), "age", Var("age")),
+            (Var("person"), "age_stage", Var("stage")),
+        ]
+        with self.assertNumQueries(1):
+            solutions = self.solve(query)
+            self.assertSetEqual(solutions, set())
 
-    #     with self.assertNumQueries(11):
-    #         api.bulk_add([("brother", "age", 2), ("sister", "age", 22)])
+        with self.assertNumQueries(9):
+            api.bulk_add([("brother", "age", 2), ("sister", "age", 22)])
 
-    #     with self.assertNumQueries(2):
-    #         solutions = self.solve(query)
-    #         self.assertSetEqual(
-    #             solutions,
-    #             {
-    #                 frozenset(
-    #                     {
-    #                         ("person", "sister"),
-    #                         ("age", 22),
-    #                         ("stage", "adult"),
-    #                     }
-    #                 ),
-    #                 frozenset(
-    #                     {
-    #                         ("person", "brother"),
-    #                         ("age", 2),
-    #                         ("stage", "minor"),
-    #                     }
-    #                 ),
-    #             },
-    #         )
+        with self.assertNumQueries(2):
+            solutions = self.solve(query)
+            self.assertSetEqual(
+                solutions,
+                {
+                    frozenset(
+                        {
+                            ("person", "sister"),
+                            ("age", 22),
+                            ("stage", "adult"),
+                        }
+                    ),
+                    frozenset(
+                        {
+                            ("person", "brother"),
+                            ("age", 2),
+                            ("stage", "minor"),
+                        }
+                    ),
+                },
+            )
 
-    #     with self.assertNumQueries(14):
-    #         api.bulk_add(
-    #             [
-    #                 ("brother", "age", 100),
-    #                 ("sister", "age", 2),
-    #                 ("father", "age", 54),
-    #             ]
-    #         )
+        with self.assertNumQueries(9):
+            api.bulk_add(
+                [
+                    ("brother", "age", 100),
+                    ("sister", "age", 2),
+                    ("father", "age", 54),
+                ]
+            )
 
-    #     with self.assertNumQueries(2):
-    #         solutions = self.solve(query)
-    #         self.assertSetEqual(
-    #             solutions,
-    #             {
-    #                 frozenset(
-    #                     {
-    #                         ("person", "sister"),
-    #                         ("age", 2),
-    #                         ("stage", "minor"),
-    #                     }
-    #                 ),
-    #                 frozenset(
-    #                     {
-    #                         ("person", "brother"),
-    #                         ("age", 100),
-    #                         ("stage", "adult"),
-    #                     }
-    #                 ),
-    #                 frozenset(
-    #                     {
-    #                         ("person", "father"),
-    #                         ("age", 54),
-    #                         ("stage", "adult"),
-    #                     }
-    #                 ),
-    #             },
-    #         )
+        with self.assertNumQueries(2):
+            solutions = self.solve(query)
+            self.assertSetEqual(
+                solutions,
+                {
+                    frozenset(
+                        {
+                            ("person", "sister"),
+                            ("age", 2),
+                            ("stage", "minor"),
+                        }
+                    ),
+                    frozenset(
+                        {
+                            ("person", "brother"),
+                            ("age", 100),
+                            ("stage", "adult"),
+                        }
+                    ),
+                    frozenset(
+                        {
+                            ("person", "father"),
+                            ("age", 54),
+                            ("stage", "adult"),
+                        }
+                    ),
+                },
+            )

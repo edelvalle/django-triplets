@@ -50,15 +50,15 @@ class Fact:
 
 
 class StoredFactQS(models.QuerySet["StoredFact"]):
-    def add(self, fact: untyped.Fact) -> None:
+    def add(self, fact: untyped.Fact) -> UUID:
         """Adds a fact to knowledge base."""
-        self.bulk_add([fact])
+        return self.bulk_add([fact])
 
     def bulk_add(
         self,
         facts: t.Sequence[untyped.Fact],
         tx_id: t.Optional[UUID] = None,
-    ):
+    ) -> UUID:
         """Use this method to add many facts to the knowledge base.
         This method has better performance than adding the facts one by one.
         """
@@ -68,6 +68,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             tx_id,
             [(fact, None, None) for fact in facts],
         )
+        return tx_id
 
     def _bulk_add(
         self,
@@ -138,17 +139,18 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
                 query |= models.Q(entity=entity, attr=attr)
             self._bulk_remove(tx_id, query)
 
-    def remove(self, fact: untyped.Fact):
+    def remove(self, fact: untyped.Fact) -> UUID | None:
         """Removes a fact form the knowledge base"""
-        self.bulk_remove({fact})
+        return self.bulk_remove({fact})
 
-    def bulk_remove(self, facts: set[untyped.Fact]):
+    def bulk_remove(self, facts: set[untyped.Fact]) -> UUID | None:
         if facts:
             tx = Transaction.new()
             query = models.Q()
             for fact in facts:
                 query |= models.Q(**Fact.as_dict(fact))
             self._bulk_remove(tx.id, query)
+            return tx.id
 
     def _bulk_remove(self, tx_id: UUID, query: models.Q):
         stored_facts = self._as_of_now().filter(query)
@@ -202,7 +204,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
             self._as_of(as_of)._lookup
         )
 
-    def refresh_inference(self):
+    def refresh_inference(self) -> UUID:
         """Runs all the settings.TRIPLETS_INFERENCE_RULES configured agains the
         knowledge base to keep it consistent.
         """
@@ -216,42 +218,43 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         self._bulk_add(
             tx.id, list(core.refresh_rules(INFERENCE_RULES, self._lookup))
         )
+        return tx.id
 
     def _lookup(self, predicate: core.Clause) -> t.Iterable[untyped.Fact]:
         "This is used by the core engine to lookup predicates in the database"
-        query: dict[str, t.Any] = {
-            "attr": predicate.attr,
-        }
-        match predicate.entity:
-            case str():
-                query["entity"] = predicate.entity
-            case ast.In(_, values):
-                query["entity__in"] = values
-            case ast.Any() | ast.Var():
-                ...
-            case int():
-                raise TypeError(
-                    f"I was not expecting this type {type(predicate.entity)}: "
-                    f"{predicate.entity} here"
-                )
-
-        match predicate.value:
-            case int(value) | str(value):
-                suffix = ast.type_name(type(value))
-                query[f"value_{suffix}"] = value
-            case ast.In(_, values, data_type):
-                if values:
-                    suffix = ast.type_name(data_type)
-                    query[f"value_{suffix}__in"] = values
-                else:
-                    # this is looking for nothing, so is safe to abort here
-                    return []
-            case ast.Any(data_type) | ast.Var(_, data_type):
-                suffix = ast.type_name(data_type)
-
-        return self.filter(**query).values_list(
+        suffix = ast.type_name(ATTRIBUTES[predicate.attr].data_type)
+        attr = models.Q(attr=predicate.attr)
+        entity = self._lookup_exp_to_query("entity", predicate.entity)
+        value = self._lookup_exp_to_query(f"value_{suffix}", predicate.value)
+        return self.filter(entity & attr & value).values_list(
             "entity", "attr", f"value_{suffix}"
         )
+
+    comparision_op_suffixes: dict[untyped.ComparisonOperator, str] = {
+        "<": "lt",
+        "<=": "lte",
+        ">": "gt",
+        ">=": "gte",
+    }
+
+    def _lookup_exp_to_query(
+        self, field_name: str, exp: ast.LookUpExpression.T
+    ) -> models.Q:
+        match exp:
+            case int() | str():
+                return models.Q(**{field_name: exp})
+            case ast.Any() | ast.Var():
+                return models.Q()
+            case ast.In(_, values):
+                return models.Q(**{f"{field_name}__in": values})
+            case ast.Comparison():
+                _, op, value = exp.for_lookup
+                suffix = self.comparision_op_suffixes[op]
+                return models.Q(**{f"{field_name}__{suffix}": value})
+            case ast.And(left, right):
+                return self._lookup_exp_to_query(
+                    field_name, left
+                ) & self._lookup_exp_to_query(field_name, right)
 
     def _as_of_now(self) -> "StoredFactQS":
         return self.filter(removed__isnull=True)

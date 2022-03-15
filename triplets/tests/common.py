@@ -101,16 +101,17 @@ descendants_rules = compile_rules(
 )
 
 
-# TODO: comparison, reactivate when we have comparison in the predicates
-# class AgeStage:
-#     predicate = [(Var("person"), "age", Var("age"))]
-
-#     @staticmethod
-#     def implies(person: str, age: int):
-#         yield (person, "age_stage", "minor" if age < 21 else "adult")
+class MinorAgeStage:
+    predicate = [(Var("person"), "age", Var("age") < 21)]
+    implies = [(Var("person"), "age_stage", "minor")]
 
 
-# age_stage_rules = compile_rules(attributes, AgeStage)
+class AdultAgeStage:
+    predicate = [(Var("person"), "age", Var("age") >= 21)]
+    implies = [(Var("person"), "age_stage", "adult")]
+
+
+age_stage_rules = compile_rules(attributes, MinorAgeStage, AdultAgeStage)
 
 
 class TestUsingDjango(TestCase):

@@ -1,3 +1,4 @@
+import operator
 import typing as t
 from dataclasses import dataclass
 
@@ -14,11 +15,47 @@ Context = dict[str, Ordinal]
 class Var:
     name: str
 
+    def __gt__(self, other: t.Union["Var", Ordinal]) -> "Comparison":
+        return Comparison(">", self, other)
+
+    def __ge__(self, other: t.Union["Var", Ordinal]) -> "Comparison":
+        return Comparison(">=", self, other)
+
+    def __lt__(self, other: t.Union["Var", Ordinal]) -> "Comparison":
+        return Comparison("<", self, other)
+
+    def __le__(self, other: t.Union["Var", Ordinal]) -> "Comparison":
+        return Comparison("<=", self, other)
+
 
 @dataclass(slots=True)
 class In:
     name: str
     value: set[Ordinal]
+
+
+ComparisonOperator = (
+    t.Literal["<"] | t.Literal["<="] | t.Literal[">="] | t.Literal[">"]
+)
+operators: dict[ComparisonOperator, t.Callable[[Ordinal, Ordinal], bool]] = {
+    "<": operator.lt,
+    "<=": operator.le,
+    ">=": operator.ge,
+    ">": operator.gt,
+}
+reverse_operator: dict[ComparisonOperator, ComparisonOperator] = {
+    "<": ">=",
+    "<=": ">",
+    ">": "<=",
+    ">=": "<",
+}
+
+
+@dataclass(slots=True)
+class Comparison:
+    operator: ComparisonOperator
+    left: Var
+    right: Var | Ordinal
 
 
 class AnyType:
@@ -28,8 +65,8 @@ class AnyType:
 Any = AnyType()
 
 
-EntityExpression = AnyType | Var | In | str
-ValueExpression = AnyType | Var | In | Ordinal
+EntityExpression = AnyType | Var | In | Comparison | str
+ValueExpression = AnyType | Var | In | Comparison | Ordinal
 
 ClauseTuple = tuple[EntityExpression, str, ValueExpression]
 PredicateTuples = t.Sequence[ClauseTuple]
