@@ -4,7 +4,7 @@ from . import common
 
 class TestDjango(common.TestUsingDjango):
     def setUp(self):
-        self.populate_db([])
+        self.populate_db(common.attributes, common.people_facts, [])
 
     def test_solving_single_query_with_two_variables(self):
         query = [(Var("child"), "child_of", Var("parent"))]

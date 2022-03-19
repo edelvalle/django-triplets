@@ -206,7 +206,7 @@ class Comparison:
                     t.cast(Ordinal, self.right),
                 )
         else:
-            raise RuntimeError("Comparision: {self} can't be looked up")
+            raise RuntimeError(f"Comparision: {self} can't be looked up")
 
     def substitute(self, contexts: t.Sequence[Context]) -> "BooleanExpression":
         left = ComparisionOperand.substitute(self.left, contexts)
@@ -247,7 +247,7 @@ class Comparison:
                         return replace(self, left=left, right=right)
                     case In(_, values, data_type):
                         # x < y in {1, 2, 3} => x < max(y)
-                        # x > y in {1, 2, 3} => x > min(y
+                        # x > y in {1, 2, 3} => x > min(y)
                         # x > y in Ø => x in Ø
                         if values:
                             extreme = self._extreme(values, goes="right")
@@ -272,7 +272,7 @@ class Comparison:
 
                     case Var(right_name):
                         # x in {1, 2, 3} < y => min(x) < y
-                        # x in {1, 2, 3} > y => max(x) > min(y
+                        # x in {1, 2, 3} > y => max(x) > min(y)
                         # x > y in Ø => x in Ø
                         if values:
                             extreme = self._extreme(values, goes="left")
@@ -360,6 +360,14 @@ class LookUpExpression:
         match exp:
             case str():
                 return exp
+            case untyped.And(left, right):
+                typed_left = t.cast(
+                    BooleanExpression, cls.from_entity_expression(left)
+                )
+                typed_right = t.cast(
+                    BooleanExpression, cls.from_entity_expression(right)
+                )
+                return And(typed_left, typed_right)
             case untyped.Comparison(operator, left, right):
                 match right:
                     case str() | untyped.Var():
@@ -399,6 +407,14 @@ class LookUpExpression:
         match exp:
             case str(value) | int(value):
                 return value
+            case untyped.And(left, right):
+                typed_left = t.cast(
+                    BooleanExpression, cls.from_entity_expression(left)
+                )
+                typed_right = t.cast(
+                    BooleanExpression, cls.from_entity_expression(right)
+                )
+                return And(typed_left, typed_right)
             case untyped.Comparison(operator, left, right):
                 typed_left = t.cast(
                     ComparisionOperand.T,

@@ -3,7 +3,6 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from hashlib import shake_128
 from itertools import chain
-from types import TracebackType
 
 from .ast import AttrDict, LookUpExpression, Ordinal, VarTypes
 from .ast_untyped import ClauseTuple, Context, Fact, PredicateTuples
@@ -32,22 +31,37 @@ class Solution:
     def merge(
         self,
         solutions: t.Iterable["Solution"],
+        clause_before_substitution: "Clause",
     ) -> t.Iterable["Solution"]:
         for solution in solutions:
             # two solutions can merge when:
             # - we don't share the same facts in `derived_from`
             # - we can merge our contexts without override
             #   (meaning that their union is commutative)
+            # - and the fact from which is derived a new solution
+            #   satisfies the clause_before_substitution constrain
             if (
-                not self.derived_from
-                or not self.derived_from.issubset(solution.derived_from)
-            ) and (context := (self.context | solution.context)) == (
-                solution.context | self.context
+                (
+                    not self.derived_from
+                    or not self.derived_from.issubset(solution.derived_from)
+                )
+                and (context := (self.context | solution.context))
+                == (solution.context | self.context)
+                and self.satisfies_constrain(
+                    clause_before_substitution, solution
+                )
             ):
                 yield Solution(
                     context=context,
                     derived_from=self.derived_from | solution.derived_from,
                 )
+
+    def satisfies_constrain(
+        self, clause_before_substitution: "Clause", solution: "Solution"
+    ) -> bool:
+        fact = next(iter(solution.derived_from))
+        constrain = clause_before_substitution.substitute([self.context])
+        return bool(list(constrain.matches(fact)))
 
 
 @dataclass(frozen=True)
@@ -74,7 +88,23 @@ class Clause:
     def __repr__(self) -> str:
         return f"({self.entity}, {self.attr}, {self.value})"
 
-    def substitute_using(self, contexts: list[Context]):
+    @property
+    def can_be_solved(self) -> bool:
+        left = set(
+            t.cast(
+                VarTypes.T,
+                LookUpExpression.variable_types(self.entity).value,
+            )
+        )
+        right = set(
+            t.cast(
+                VarTypes.T,
+                LookUpExpression.variable_types(self.value).value,
+            )
+        )
+        return len(left) <= 1 and len(right) <= 1
+
+    def substitute(self, contexts: list[Context]):
         """Replaces variables in this predicate with their values form the
         context
         """
@@ -118,7 +148,9 @@ class Clause:
 @dataclass(slots=True, init=False)
 class Predicate(t.Iterable[Clause]):
     clauses: list[Clause]
+    clauses_before_substitution: dict[Clause, Clause]
     variables_types: VarTypes.T
+    was_planned: bool
 
     @classmethod
     def from_tuples(
@@ -131,9 +163,15 @@ class Predicate(t.Iterable[Clause]):
         )
 
     def __init__(
-        self, clauses: list[Clause], variables_types: VarTypes.T | None = None
+        self,
+        clauses: list[Clause],
+        variables_types: VarTypes.T | None = None,
+        clauses_before_substitution: dict[Clause, Clause] | None = None,
+        was_planned: bool = False,
     ):
         self.clauses = clauses
+        self.clauses_before_substitution = clauses_before_substitution or {}
+        self.was_planned = was_planned
         if variables_types is None:
             match VarTypes.merge(clause.variable_types for clause in self):
                 case Ok(v_types):
@@ -155,6 +193,9 @@ class Predicate(t.Iterable[Clause]):
         """Assumes tha this predicate is a query and orders the clauses to
         perform an optimal query
         """
+        if self.was_planned:
+            return self
+
         result: list[Clause] = []
         solved_variables: set[str] = set()
         # by this time the variables types are Ok
@@ -201,7 +242,8 @@ class Predicate(t.Iterable[Clause]):
             )
 
             # We pick the first one and continue
-            for selected_clause in priorized_clauses:
+            selected_clause = first(priorized_clauses)
+            if selected_clause is not None:
                 result.append(selected_clause)
                 solved_variables.update(
                     solvable_clauses_to_vars[selected_clause]
@@ -211,12 +253,22 @@ class Predicate(t.Iterable[Clause]):
                     for clause, (left, right) in unsolved_clauses.items()
                     if clause != selected_clause
                 }
-                break
-        return replace(self, clauses=result)
+
+        return replace(self, clauses=result, was_planned=True)
 
     def substitute(self, contexts: list[Context]) -> "Predicate":
+        # Is very important here to preserve the order of the clauses,
+        # because if this predicate was already "query planned" that order
+        # matters.
+        # We also need to keep a map to the clauses before substitution happens
+
+        # This trick relies in the fact that dicts in python perserve insertion
+        # order
+        clauses = {clause.substitute(contexts): clause for clause in self}
         return replace(
-            self, clauses=[clause.substitute_using(contexts) for clause in self]
+            self,
+            clauses=list(clauses),
+            clauses_before_substitution=clauses,
         )
 
     def evaluate(self, context: Context) -> t.Iterable[Fact]:
@@ -252,33 +304,44 @@ class Query:
         attributes: AttrDict,
         predicate: PredicateTuples,
     ) -> "Query":
-        return cls(Predicate.from_tuples(attributes, predicate).planned)
+        return cls(Predicate.from_tuples(attributes, predicate))
 
     def solve(self, lookup: LookUpFunction) -> t.List[Solution]:
         if self.predicate and self.solutions:
-            clause, *predicate = self.predicate
-            predicate_solutions = list(
+            predicate = self.predicate.substitute(
+                [s.context for s in self.solutions]
+            ).planned
+
+            clause, *clauses = predicate
+
+            # local solutions
+            solutions = list(
                 chain(*(clause.matches(fact) for fact in lookup(clause)))
             )
 
-            next_query = Query(
-                Predicate(predicate, self.predicate.variables_types),
-                solutions=list(
-                    chain(
-                        *[
-                            solution.merge(predicate_solutions)
-                            for solution in self.solutions
-                        ]
-                    )
-                ),
+            clauses_before_substitution = predicate.clauses_before_substitution[
+                clause
+            ]
+
+            # local solutions merged with my solution
+            solutions = list(
+                chain(
+                    *[
+                        solution.merge(solutions, clauses_before_substitution)
+                        for solution in self.solutions
+                    ]
+                )
             )
-            return next_query.solve(lookup)
+
+            predicate = replace(predicate, clauses=clauses)
+            return Query(predicate, solutions).solve(lookup)
         else:
             return self.solutions
 
 
 @dataclass(init=False)
 class Rule:
+    name: str
     predicate: Predicate
     implies: Predicate
     _solution: Solution
@@ -286,11 +349,13 @@ class Rule:
 
     def __init__(
         self,
+        name: str,
         predicate: Predicate,
         implies: Predicate,
         _solution: Solution | None = None,
         _variable_types: VarTypes.T | None = None,
     ):
+        self.name = name
         self.predicate = predicate
         self.implies = implies
         self._solution = _solution or Solution.new_empty()
@@ -333,7 +398,7 @@ class Rule:
         return storage_hash(self.__repr__())
 
     def __repr__(self) -> str:
-        return f"Rule: {self.predicate} => {self.implies}"
+        return f"{self.name}: {self.predicate} => {self.implies}"
 
     def matches(self, fact: Fact) -> t.Iterable["Rule"]:
         """If the `fact` matches this rule this function returns a rule
@@ -342,31 +407,36 @@ class Rule:
         for clause, match in self.predicate.matches(fact):
             # this new predicate does not include the clause that matched
             # and has a substitution done by the found results
-            predicate = Predicate(
-                [c for c in self.predicate if c != clause],
-                variables_types=self.predicate.variables_types,
-            ).substitute([match.context])
 
-            for solution in self._solution.merge([match]):
-                yield replace(
-                    self,
-                    predicate=predicate,
-                    implies=self.implies,
-                    _variable_types=self._variable_types,
-                    _solution=solution,
-                )
+            # remove the matched clause from the predicate
+            predicate = replace(
+                self.predicate,
+                clauses=[c for c in self.predicate if c != clause],
+            )
+
+            # but if the current clause has too many variables and can't be
+            # solved, then we substitute the current solution and reinsert it
+            # in the predicate
+            if not clause.can_be_solved:
+                predicate.clauses.append(clause.substitute([match.context]))
+
+            yield replace(
+                self,
+                predicate=predicate,
+                _solution=match,
+            )
 
     def run(
         self,
         lookup: LookUpFunction,
     ) -> t.Iterable[tuple[Fact, set[Fact]]]:
-        for solution in Query(self.predicate).solve(lookup):
-            for merged_solution in self._solution.merge([solution]):
-                for fact in self.implies.evaluate(merged_solution.context):
-                    yield (fact, merged_solution.derived_from)
+        for solution in Query(self.predicate, [self._solution]).solve(lookup):
+            for fact in self.implies.evaluate(solution.context):
+                yield (fact, solution.derived_from)
 
 
 class RuleProtocol(t.Protocol):
+    __name__: str
     predicate: PredicateTuples
     implies: PredicateTuples
 
@@ -374,8 +444,9 @@ class RuleProtocol(t.Protocol):
 def compile_rules(attributes: AttrDict, *rules: RuleProtocol) -> list[Rule]:
     return [
         Rule(
-            Predicate.from_tuples(attributes, r.predicate),
-            Predicate.from_tuples(attributes, r.implies),
+            r.__name__,
+            Predicate.from_tuples(attributes, r.predicate).planned,
+            Predicate.from_tuples(attributes, r.implies).planned,
         )
         for r in rules
     ]
@@ -415,3 +486,10 @@ def _run_rules(
     for rule, original_rule_id in rules_and_original_ids:
         for fact, bases in rule.run(lookup):
             yield fact, original_rule_id, bases
+
+
+T = t.TypeVar("T")
+
+
+def first(iterable: t.Iterable[T]) -> T | None:
+    return next(iter(iterable), None)

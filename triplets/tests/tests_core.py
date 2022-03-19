@@ -77,15 +77,15 @@ class TestClause(TestCase):
             (Var("person"), "son_of", Var("parent")), self.attributes
         )
         self.assertEqual(
-            clause.substitute_using([{"parent": "PARENT"}]),
+            clause.substitute([{"parent": "PARENT"}]),
             Clause(typed.Var("person", str), "son_of", "PARENT"),
         )
         self.assertEqual(
-            clause.substitute_using([{"person": "PERSON"}]),
+            clause.substitute([{"person": "PERSON"}]),
             Clause("PERSON", "son_of", typed.Var("parent", str)),
         )
         self.assertEqual(
-            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause.substitute([{"unknown": "VALUE"}]),
             clause,
         )
 
@@ -94,7 +94,7 @@ class TestClause(TestCase):
             (Var("person"), "son_of", Var("parent")), self.attributes
         )
         self.assertEqual(
-            clause.substitute_using([{"parent": "A"}, {"parent": "B"}]),
+            clause.substitute([{"parent": "A"}, {"parent": "B"}]),
             Clause(
                 typed.Var("person", str),
                 "son_of",
@@ -102,13 +102,13 @@ class TestClause(TestCase):
             ),
         )
         self.assertEqual(
-            clause.substitute_using(
+            clause.substitute(
                 [{"person": "P", "parent": "A"}, {"person": "P", "parent": "B"}]
             ),
             Clause("P", "son_of", typed.In("parent", {"A", "B"}, str)),
         )
         self.assertEqual(
-            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause.substitute([{"unknown": "VALUE"}]),
             clause,
         )
 
@@ -117,12 +117,12 @@ class TestClause(TestCase):
             (Var("person"), "son_of", Any), self.attributes
         )
         self.assertEqual(
-            str(clause.substitute_using([{"parent": "A"}, {"parent": "B"}])),
+            str(clause.substitute([{"parent": "A"}, {"parent": "B"}])),
             "(?person: str, son_of, ?: str)",
         )
         self.assertEqual(
             str(
-                clause.substitute_using(
+                clause.substitute(
                     [
                         {"person": "P", "parent": "A"},
                         {"person": "P", "parent": "B"},
@@ -132,7 +132,7 @@ class TestClause(TestCase):
             "(P, son_of, ?: str)",
         )
         self.assertEqual(
-            clause.substitute_using([{"unknown": "VALUE"}]),
+            clause.substitute([{"unknown": "VALUE"}]),
             clause,
         )
 
@@ -202,8 +202,6 @@ class TestClause(TestCase):
             Err({"entity": {str, int}}),
         )
 
-        # TODO: comparison, test the Err case when this fails, because we have
-
 
 class TestPredicate(TestCase):
     def test_checks_that_the_type_of_variables_is_consistent(self):
@@ -265,7 +263,7 @@ class TestRule(TestCase):
 
         self.assertEqual(
             str(e.exception),
-            "Rule: [(?person: str, age, ?age: int in {1, 2}), "
+            "TestRule: [(?person: str, age, ?age: int in {1, 2}), "
             "(?person: str, color, ?: str)] => [(?parent: str, color, blue)], "
             "is missing these variables in the predicate: {'parent'}",
         )
@@ -287,7 +285,7 @@ class TestRule(TestCase):
             str(e.exception),
             "\n".join(
                 [
-                    "Type mismatch in Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
+                    "Type mismatch in TestRule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
                     "- age: str, int",
                 ]
             ),
@@ -307,5 +305,5 @@ class TestRule(TestCase):
 
         self.assertEqual(
             str(e.exception),
-            "Rule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, blue)] => [(?: str, color, blue)], implications can't have Any on them",
+            "TestRule: [(?person: str, color, blue), (?person: str, age, ?age: int in {1, 2})] => [(?: str, color, blue)], implications can't have Any on them",
         )

@@ -57,6 +57,21 @@ class Comparison:
     left: Var
     right: Var | Ordinal
 
+    def __and__(self, other: "BooleanExpression") -> "And":
+        return And(self, other)
+
+
+@dataclass(slots=True)
+class And:
+    left: "BooleanExpression"
+    right: "BooleanExpression"
+
+    def __and__(self, other: "BooleanExpression") -> "And":
+        return And(self, other)
+
+
+BooleanExpression = And | Comparison | In
+
 
 class AnyType:
     ...
@@ -64,9 +79,8 @@ class AnyType:
 
 Any = AnyType()
 
-
-EntityExpression = AnyType | Var | In | Comparison | str
-ValueExpression = AnyType | Var | In | Comparison | Ordinal
+EntityExpression = AnyType | Var | BooleanExpression | str
+ValueExpression = AnyType | Var | BooleanExpression | Ordinal
 
 ClauseTuple = tuple[EntityExpression, str, ValueExpression]
 PredicateTuples = t.Sequence[ClauseTuple]

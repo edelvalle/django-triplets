@@ -6,7 +6,8 @@ from django.test import TestCase
 
 from .. import api, models
 from ..api import Var
-from ..ast import Attr, Ordinal
+from ..ast import Attr, AttrDict, Ordinal
+from ..ast_untyped import Fact
 from ..core import PredicateTuples, Rule, compile_rules
 
 attributes = Attr.as_dict(
@@ -18,10 +19,13 @@ attributes = Attr.as_dict(
     Attr("dad_of", str, "many"),
     Attr("age", int, "one"),
     Attr("age_stage", str, "one"),
+    # weather stuff
+    Attr("temperature", int, "one"),
+    Attr("precipitation_percentage", int, "one"),
 )
 
 
-triplets = [
+people_facts: list[Fact] = [
     # the broder
     ("brother", "child_of", "father"),
     ("brother", "child_of", "mother"),
@@ -118,9 +122,11 @@ class TestUsingDjango(TestCase):
     def tearDown(self):
         models.INFERENCE_RULES = []
 
-    def populate_db(self, rules: list[Rule]):
-        models.INFERENCE_RULES = rules
+    def populate_db(
+        self, attributes: AttrDict, triplets: list[Fact], rules: list[Rule]
+    ):
         models.ATTRIBUTES = attributes
+        models.INFERENCE_RULES = rules
         api.bulk_add(triplets)
 
     def solve(
