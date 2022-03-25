@@ -316,7 +316,9 @@ class Query:
 
             # local solutions
             solutions = list(
-                chain(*(clause.matches(fact) for fact in lookup(clause)))
+                chain.from_iterable(
+                    clause.matches(fact) for fact in lookup(clause)
+                )
             )
 
             clauses_before_substitution = predicate.clauses_before_substitution[

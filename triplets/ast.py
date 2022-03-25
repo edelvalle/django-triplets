@@ -160,6 +160,8 @@ class ComparisionOperand:
                 return int
             case str():
                 return str
+            case float():
+                return float
             case Var(_, data_type):
                 return data_type
 
@@ -168,7 +170,7 @@ class ComparisionOperand:
         cls, self: T, contexts: t.Iterable[Context]
     ) -> Var | In | Ordinal:
         match self:
-            case int() | str():
+            case str() | int() | float():
                 return self
             case Var():
                 return self.substitute(contexts)
@@ -212,9 +214,9 @@ class Comparison:
         left = ComparisionOperand.substitute(self.left, contexts)
         right = ComparisionOperand.substitute(self.right, contexts)
         match left:
-            case int() | str():
+            case str() | int() | float():
                 match right:
-                    case int() | str():
+                    case int() | str() | float():
                         # 1 < 10 => 1 < x' < 10
                         hidden_var = Var.new_hidden(type(left))
                         return And(
@@ -239,7 +241,7 @@ class Comparison:
                             return In.new_null(data_type)
             case Var(left_name):
                 match right:
-                    case int() | str():
+                    case str() | int() | float():
                         # x < 1 => x < 1
                         return replace(self, left=left, right=right)
                     case Var():
@@ -256,9 +258,9 @@ class Comparison:
                             return In.new_null(data_type, name=left_name)
             case In(_, values, data_type):
                 match right:
-                    case int() | str():
-                        # x in {1, 2, 3} < 2 < => min(x) < x' < 2
-                        # x in {1, 2, 3} > 2 < => max(x) > x' > 2
+                    case str() | int() | float():
+                        # x in {1, 2, 3} < 2 => min(x) < x' < 2
+                        # x in {1, 2, 3} > 2 => max(x) > x' > 2
                         # x in Ø > 2 => x' in Ø
                         if values:
                             hidden_var = Var.new_hidden(data_type)
@@ -380,9 +382,9 @@ class LookUpExpression:
                             cls.from_entity_expression(right),
                         )
                         return Comparison(operator, typed_left, typed_right)
-                    case int():
+                    case int() | float():
                         raise TypeError(
-                            f"Found entity comparision that are not str: "
+                            f"Found entity comparision that are not a str: "
                             f"{right}"
                         )
             case untyped.In(name, values):
@@ -405,7 +407,7 @@ class LookUpExpression:
         attributes: AttrDict,
     ) -> T:
         match exp:
-            case str(value) | int(value):
+            case str(value) | int(value) | float(value):
                 return value
             case untyped.And(left, right):
                 typed_left = t.cast(
@@ -442,7 +444,7 @@ class LookUpExpression:
     @classmethod
     def variable_types(cls, self: T) -> VarTypes.MergeResult:
         match self:
-            case int() | str():
+            case int() | str() | float():
                 return Ok({})
             case (
                 In(name, _, data_type)
@@ -462,7 +464,7 @@ class LookUpExpression:
         Returning None means that there was no match
         """
         match self:
-            case str(ordinal_value) | int(ordinal_value):
+            case str(ordinal_value) | int(ordinal_value) | float(ordinal_value):
                 if ordinal_value == value:
                     yield {}
 
@@ -477,19 +479,19 @@ class LookUpExpression:
                 match left:
                     case Var(left_name):
                         match right:
-                            case int() | str():
+                            case str() | int() | float():
                                 if untyped.operators[op](value, right):
                                     yield {left_name: value}
                             case Var(right_name):
                                 # matches both because we don't know for sure
                                 yield {left_name: value}
                                 yield {right_name: value}
-                    case int() | str():
+                    case str() | int() | float():
                         match right:
                             case Var(right_name):
                                 if untyped.operators[op](left, value):
                                     yield {right_name: value}
-                            case int() | str():
+                            case str() | int() | float():
                                 if untyped.operators[op](left, right):
                                     yield {}
 
@@ -504,7 +506,7 @@ class LookUpExpression:
     @classmethod
     def substitute(cls, self: T, contexts: t.Sequence[Context]) -> T:
         match self:
-            case str() | int() | Any():
+            case str() | int() | float() | Any():
                 return self
             case In() | Var() | Comparison() | And():
                 return self.substitute(contexts)

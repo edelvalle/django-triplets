@@ -241,7 +241,7 @@ class StoredFactQS(models.QuerySet["StoredFact"]):
         self, field_name: str, exp: ast.LookUpExpression.T
     ) -> models.Q:
         match exp:
-            case int() | str():
+            case str() | int() | float():
                 return models.Q(**{field_name: exp})
             case ast.Any() | ast.Var():
                 return models.Q()
@@ -337,6 +337,7 @@ class StoredFact(models.Model):
         max_length=64, null=True
     )
     value_int: models.IntegerField[int, int] = models.IntegerField(null=True)
+    value_float: models.FloatField[float, float] = models.FloatField(null=True)
 
     @property
     def value(self) -> ast.Ordinal:
@@ -376,6 +377,7 @@ class StoredFact(models.Model):
             # used to delete InferredSolutions
             models.Index(fields=["entity", "attr", "value_str"]),
             models.Index(fields=["entity", "attr", "value_int"]),
+            models.Index(fields=["entity", "attr", "value_float"]),
             # use for as_of
             models.Index(fields=["added", "removed"]),
             # used for lookup
@@ -383,6 +385,7 @@ class StoredFact(models.Model):
             models.Index(fields=["entity", "attr"]),
             models.Index(fields=["attr", "value_str"]),
             models.Index(fields=["attr", "value_int"]),
+            models.Index(fields=["attr", "value_float"]),
         ]
 
     def __str__(self):

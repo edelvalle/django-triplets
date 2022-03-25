@@ -3,9 +3,9 @@ import typing as t
 from dataclasses import dataclass
 
 Entity = str
-Ordinal = str | int
+Ordinal = str | int | float
 OrdinalType = t.Type[Ordinal]
-OrdinalTypes = (str, int)
+OrdinalTypes = (str, int, float)
 
 Fact = tuple[str, str, Ordinal]
 Context = dict[str, Ordinal]
