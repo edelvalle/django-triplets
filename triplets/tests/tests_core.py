@@ -305,5 +305,5 @@ class TestRule(TestCase):
 
         self.assertEqual(
             str(e.exception),
-            "TestRule: [(?person: str, color, blue), (?person: str, age, ?age: int in {1, 2})] => [(?: str, color, blue)], implications can't have Any on them",
+            "TestRule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, blue)] => [(?: str, color, blue)], implications can't have Any on them",
         )
