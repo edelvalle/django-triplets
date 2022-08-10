@@ -148,6 +148,7 @@ class Clause:
 @dataclass(slots=True, init=False)
 class Predicate(t.Iterable[Clause]):
     clauses: list[Clause]
+    attributes: AttrDict
     clauses_before_substitution: dict[Clause, Clause]
     variables_types: VarTypes.T
     was_planned: bool
@@ -159,17 +160,20 @@ class Predicate(t.Iterable[Clause]):
         predicate: PredicateTuples,
     ) -> "Predicate":
         return cls(
-            [Clause.from_tuple(clause, attributes) for clause in predicate]
+            [Clause.from_tuple(clause, attributes) for clause in predicate],
+            attributes,
         )
 
     def __init__(
         self,
         clauses: list[Clause],
+        attributes: AttrDict,
         variables_types: VarTypes.T | None = None,
         clauses_before_substitution: dict[Clause, Clause] | None = None,
         was_planned: bool = False,
     ):
         self.clauses = clauses
+        self.attributes = attributes
         self.clauses_before_substitution = clauses_before_substitution or {}
         self.was_planned = was_planned
         if variables_types is None:
@@ -235,8 +239,14 @@ class Predicate(t.Iterable[Clause]):
             prioritized_clauses = sorted(
                 solvable_clauses_to_vars,
                 key=lambda clause: sum(
+                    # Querying attr with cardinality "one" is cheaper
+                    (
+                        1
+                        if self.attributes[clause.attr].cardinality == "one"
+                        else 3
+                    )
                     # Make the `Any` matcher very expensive
-                    (10 if var_name.startswith("*") else 1)
+                    + (10 if var_name.startswith("*") else 1)
                     for var_name in solvable_clauses_to_vars[clause]
                 ),
             )
