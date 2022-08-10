@@ -146,7 +146,7 @@ class Var:
             return In(self.name, values, self.data_type)
 
 
-class ComparisionOperand:
+class ComparisonOperand:
     T = Var | Ordinal
 
     @classmethod
@@ -179,8 +179,8 @@ class ComparisionOperand:
 @dataclass(slots=True)
 class Comparison:
     operator: untyped.ComparisonOperator
-    left: ComparisionOperand.T
-    right: ComparisionOperand.T
+    left: ComparisonOperand.T
+    right: ComparisonOperand.T
 
     def __repr__(self) -> str:
         return f"{self.left} {self.operator} {self.right}"
@@ -208,11 +208,11 @@ class Comparison:
                     t.cast(Ordinal, self.right),
                 )
         else:
-            raise RuntimeError(f"Comparision: {self} can't be looked up")
+            raise RuntimeError(f"Comparison: {self} can't be looked up")
 
     def substitute(self, contexts: t.Sequence[Context]) -> "BooleanExpression":
-        left = ComparisionOperand.substitute(self.left, contexts)
-        right = ComparisionOperand.substitute(self.right, contexts)
+        left = ComparisonOperand.substitute(self.left, contexts)
+        right = ComparisonOperand.substitute(self.right, contexts)
         match left:
             case str() | int() | float():
                 match right:
@@ -374,17 +374,17 @@ class LookUpExpression:
                 match right:
                     case str() | untyped.Var():
                         typed_left = t.cast(
-                            ComparisionOperand.T,
+                            ComparisonOperand.T,
                             cls.from_entity_expression(left),
                         )
                         typed_right = t.cast(
-                            ComparisionOperand.T,
+                            ComparisonOperand.T,
                             cls.from_entity_expression(right),
                         )
                         return Comparison(operator, typed_left, typed_right)
                     case int() | float():
                         raise TypeError(
-                            f"Found entity comparision that are not a str: "
+                            f"Found entity comparison that are not a str: "
                             f"{right}"
                         )
             case untyped.In(name, values):
@@ -419,14 +419,14 @@ class LookUpExpression:
                 return And(typed_left, typed_right)
             case untyped.Comparison(operator, left, right):
                 typed_left = t.cast(
-                    ComparisionOperand.T,
+                    ComparisonOperand.T,
                     cls.from_value_expression(left, attr_name, attributes),
                 )
                 typed_right = t.cast(
-                    ComparisionOperand.T,
+                    ComparisonOperand.T,
                     cls.from_value_expression(right, attr_name, attributes),
                 )
-                if not ComparisionOperand.are_the_same_type(
+                if not ComparisonOperand.are_the_same_type(
                     typed_left, typed_right
                 ):
                     raise TypeError(

@@ -232,7 +232,7 @@ class Predicate(t.Iterable[Clause]):
             # if it has a variable of type Any, as it will probably produce many
             # results, that one will go to the end of the tail to have it very
             # constrained during lookup
-            priorized_clauses = sorted(
+            prioritized_clauses = sorted(
                 solvable_clauses_to_vars,
                 key=lambda clause: sum(
                     # Make the `Any` matcher very expensive
@@ -242,7 +242,7 @@ class Predicate(t.Iterable[Clause]):
             )
 
             # We pick the first one and continue
-            selected_clause = first(priorized_clauses)
+            selected_clause = first(prioritized_clauses)
             if selected_clause is not None:
                 result.append(selected_clause)
                 solved_variables.update(
@@ -262,7 +262,7 @@ class Predicate(t.Iterable[Clause]):
         # matters.
         # We also need to keep a map to the clauses before substitution happens
 
-        # This trick relies in the fact that dicts in python perserve insertion
+        # This trick relies in the fact that dicts in python preserve insertion
         # order
         clauses = {clause.substitute(contexts): clause for clause in self}
         return replace(
