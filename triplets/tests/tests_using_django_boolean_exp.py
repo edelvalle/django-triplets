@@ -1,3 +1,5 @@
+from triplets.ast_untyped import PredicateTuples
+
 from ..api import Attr, Fact, In, Var, compile_rules
 from . import common
 
@@ -42,31 +44,39 @@ warm = (Var("place"), "temperature_c", Var("temp") > 0)
 
 
 class LightSnowRule:
-    predicate = [will_precipitate, light_precipitation, cold]
-    implies = [(Var("place"), "weather_condition", "light snow")]
+    predicate: PredicateTuples = [will_precipitate, light_precipitation, cold]
+    implies: PredicateTuples = [
+        (Var("place"), "weather_condition", "light snow")
+    ]
 
 
 class HeavySnowRule:
-    predicate = [will_precipitate, heavy_precipitation, cold]
-    implies = [(Var("place"), "weather_condition", "heavy snow")]
+    predicate: PredicateTuples = [will_precipitate, heavy_precipitation, cold]
+    implies: PredicateTuples = [
+        (Var("place"), "weather_condition", "heavy snow")
+    ]
 
 
 class LightRainRule:
-    predicate = [will_precipitate, light_precipitation, warm]
-    implies = [(Var("place"), "weather_condition", "light rain")]
+    predicate: PredicateTuples = [will_precipitate, light_precipitation, warm]
+    implies: PredicateTuples = [
+        (Var("place"), "weather_condition", "light rain")
+    ]
 
 
 class HeavyRainRule:
-    predicate = [will_precipitate, heavy_precipitation, warm]
-    implies = [(Var("place"), "weather_condition", "heavy rain")]
+    predicate: PredicateTuples = [will_precipitate, heavy_precipitation, warm]
+    implies: PredicateTuples = [
+        (Var("place"), "weather_condition", "heavy rain")
+    ]
 
 
 class TemperatureRelationRule:
-    predicate = [
+    predicate: PredicateTuples = [
         (Var("warm_place"), "temperature_c", Var("warm")),
         (Var("cold_place"), "temperature_c", Var("cold") < Var("warm")),
     ]
-    implies = [
+    implies: PredicateTuples = [
         (Var("warm_place"), "is_warmer_than", Var("cold_place")),
         (Var("cold_place"), "is_colder_than", Var("warm_place")),
     ]

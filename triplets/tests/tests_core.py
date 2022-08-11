@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from .. import ast as typed
 from ..ast import Attr, LookUpExpression
-from ..ast_untyped import Any, In, Var
+from ..ast_untyped import Any, In, PredicateTuples, Var
 from ..core import Clause, Predicate, compile_rules
 from ..result import Err, Ok
 
@@ -217,7 +217,7 @@ class TestPredicate(TestCase):
             "\n".join(
                 [
                     "Type mismatch in Predicate [(?age: str, age, ?age: int)], these variables have different types:",
-                    "- age: str, int",
+                    "- age: int, str",
                 ]
             ),
         )
@@ -236,7 +236,7 @@ class TestPredicate(TestCase):
             "\n".join(
                 [
                     "Type mismatch in Predicate [(?person: str, age, ?age: int), (x, color, ?age: str)], these variables have different types:",
-                    "- age: str, int",
+                    "- age: int, str",
                 ]
             ),
         )
@@ -252,12 +252,12 @@ class TestRule(TestCase):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
-                predicate = [
+                predicate: PredicateTuples = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Any),
                 ]
 
-                implies = [(Var("parent"), "color", "blue")]
+                implies: PredicateTuples = [(Var("parent"), "color", "blue")]
 
             compile_rules(self.attributes, TestRule)
 
@@ -272,12 +272,14 @@ class TestRule(TestCase):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
-                predicate = [
+                predicate: PredicateTuples = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", Any),
                 ]
 
-                implies = [(Var("person"), "color", Var("age"))]
+                implies: PredicateTuples = [
+                    (Var("person"), "color", Var("age"))
+                ]
 
             compile_rules(self.attributes, TestRule)
 
@@ -286,7 +288,7 @@ class TestRule(TestCase):
             "\n".join(
                 [
                     "Type mismatch in TestRule: [(?person: str, age, ?age: int in {1, 2}), (?person: str, color, ?: str)] => [(?person: str, color, ?age: str)]:",
-                    "- age: str, int",
+                    "- age: int, str",
                 ]
             ),
         )
@@ -295,11 +297,11 @@ class TestRule(TestCase):
         with self.assertRaises(TypeError) as e:
 
             class TestRule:
-                predicate = [
+                predicate: PredicateTuples = [
                     (Var("person"), "age", In("age", {1, 2})),
                     (Var("person"), "color", "blue"),
                 ]
-                implies = [(Any, "color", "blue")]
+                implies: PredicateTuples = [(Any, "color", "blue")]
 
             compile_rules(self.attributes, TestRule)
 

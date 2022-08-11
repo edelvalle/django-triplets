@@ -44,30 +44,30 @@ people_facts: list[Fact] = [
 
 
 class DadOf:
-    predicate = [
+    predicate: PredicateTuples = [
         (Var("child"), "child_of", Var("parent")),
         (Var("parent"), "gender", "m"),
     ]
-    implies = [(Var("parent"), "dad_of", Var("child"))]
+    implies: PredicateTuples = [(Var("parent"), "dad_of", Var("child"))]
 
 
 class MomOf:
-    predicate = [
+    predicate: PredicateTuples = [
         (Var("child"), "child_of", Var("parent")),
         (Var("parent"), "gender", "f"),
     ]
-    implies = [(Var("parent"), "mom_of", Var("child"))]
+    implies: PredicateTuples = [(Var("parent"), "mom_of", Var("child"))]
 
 
 parent_role_rules = compile_rules(attributes, DadOf, MomOf)
 
 
 class SiblingOf:
-    predicate = [
+    predicate: PredicateTuples = [
         (Var("child1"), "child_of", Var("parent")),
         (Var("child2"), "child_of", Var("parent")),
     ]
-    implies = [(Var("child1"), "sibling_of", Var("child2"))]
+    implies: PredicateTuples = [(Var("child1"), "sibling_of", Var("child2"))]
 
 
 siblings_rule = compile_rules(attributes, SiblingOf)
@@ -88,16 +88,18 @@ symmetric_sibling_rule = compile_rules(attributes, SiblingOf)
 
 
 class DescendentOfDirectParent:
-    predicate = [(Var("child"), "child_of", Var("parent"))]
-    implies = [(Var("child"), "descendant_of", Var("parent"))]
+    predicate: PredicateTuples = [(Var("child"), "child_of", Var("parent"))]
+    implies: PredicateTuples = [(Var("child"), "descendant_of", Var("parent"))]
 
 
 class DescendantOfRecursive:
-    predicate = [
+    predicate: PredicateTuples = [
         (Var("grandchild"), "descendant_of", Var("parent")),
         (Var("parent"), "descendant_of", Var("grandparent")),
     ]
-    implies = [(Var("grandchild"), "descendant_of", Var("grandparent"))]
+    implies: PredicateTuples = [
+        (Var("grandchild"), "descendant_of", Var("grandparent"))
+    ]
 
 
 descendants_rules = compile_rules(
@@ -106,13 +108,13 @@ descendants_rules = compile_rules(
 
 
 class MinorAgeStage:
-    predicate = [(Var("person"), "age", Var("age") < 21)]
-    implies = [(Var("person"), "age_stage", "minor")]
+    predicate: PredicateTuples = [(Var("person"), "age", Var("age") < 21)]
+    implies: PredicateTuples = [(Var("person"), "age_stage", "minor")]
 
 
 class AdultAgeStage:
-    predicate = [(Var("person"), "age", Var("age") >= 21)]
-    implies = [(Var("person"), "age_stage", "adult")]
+    predicate: PredicateTuples = [(Var("person"), "age", Var("age") >= 21)]
+    implies: PredicateTuples = [(Var("person"), "age_stage", "adult")]
 
 
 age_stage_rules = compile_rules(attributes, MinorAgeStage, AdultAgeStage)

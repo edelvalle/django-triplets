@@ -6,8 +6,8 @@ from . import models
 
 @admin.register(models.StoredFact)  # type: ignore
 class StoredFactAdmin(admin.ModelAdmin):  # type: ignore
-    search_fields = ["entity", "attr", "value"]
-    list_display = search_fields + ["is_inferred"]
+    search_fields = ("entity", "attr", "value")
+    list_display = search_fields + ("is_inferred",)
 
     # Don't use this interface to mess around with facts, use the API
 
